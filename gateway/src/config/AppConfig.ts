@@ -8,6 +8,9 @@ export const AppConfigSchema = z.object({
   // Primary API secret and optional secondary secret for rotation
   primaryApiKey: z.string().min(1, "LLM_API_SECRET is required"),
   secondaryApiKey: z.string().optional(),
+  guestApiKeys: z.array(z.string()).default([]),
+  guestDailyQuota: z.coerce.number().int().positive().default(10),
+  guestRateLimitPerMinute: z.coerce.number().int().positive().default(3),
 
   // Cloudflare Access Service Token Configuration
   cfAccessEnabled: z.coerce.boolean().default(false),
@@ -52,6 +55,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     host: env.HOST,
     primaryApiKey: env.LLM_API_SECRET,
     secondaryApiKey: env.LLM_API_SECRET_PREVIOUS,
+    guestApiKeys: env.LLM_GUEST_API_KEYS ? env.LLM_GUEST_API_KEYS.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+    guestDailyQuota: env.GUEST_DAILY_QUOTA ?? env.DAILY_REQUEST_QUOTA,
+    guestRateLimitPerMinute: env.GUEST_RATE_LIMIT_PER_MINUTE,
     cfAccessEnabled: env.CF_ACCESS_ENABLED,
     cfAccessClientId: env.CF_ACCESS_CLIENT_ID,
     cfAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET,

@@ -229,6 +229,16 @@ export class FakeImageProcessor implements ImageProcessor {
 export class FakeClock implements Clock {
   public currentTime = new Date("2026-11-01T12:00:00Z");
 
+  constructor(initialTime?: Date) {
+    if (initialTime) {
+      this.currentTime = initialTime;
+    }
+  }
+
+  advance(ms: number): void {
+    this.currentTime = new Date(this.currentTime.getTime() + ms);
+  }
+
   now(): Date {
     return new Date(this.currentTime.getTime());
   }

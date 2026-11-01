@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
+    "flows": "tsx scripts/flows/run-all-flows.ts",
     "build": "tsc",
     "verify:env": "tsx scripts/verify/audit-environment.ts"
   },

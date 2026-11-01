@@ -42,6 +42,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
       LLM_API_SECRET: secret,
       ALLOWED_MODELS: "qwen3.8:27b",
       DAILY_REQUEST_QUOTA: String(customDailyQuota),
+      GUEST_RATE_LIMIT_PER_MINUTE: "20",
       MAX_ACTIVE_INFERENCE: String(maxActive),
       MAX_QUEUE_CAPACITY: String(maxQueue),
       DATABASE_PATH: testDbPath

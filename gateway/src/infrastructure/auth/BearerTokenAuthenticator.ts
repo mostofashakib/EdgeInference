@@ -1,10 +1,11 @@
 import type { ApiKeyAuthenticator } from "../../domain/interfaces/index.js";
-import type { AuthenticationResult } from "../../domain/models/types.js";
+import type { AuthenticationResult, ClientRole } from "../../domain/models/types.js";
 import { timingSafeEqualString } from "../../domain/utils/timingSafe.js";
 
 export interface ConfiguredKey {
   keyId: string;
   secret: string;
+  role?: ClientRole | undefined;
 }
 
 export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
@@ -37,7 +38,12 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
     // Check all keys using constant-time string comparison
     for (const key of this.keys) {
       if (timingSafeEqualString(submittedToken, key.secret)) {
-        return { authenticated: true, keyId: key.keyId };
+        const role = key.role ?? (key.keyId.startsWith("owner") || key.keyId.includes("primary") ? "owner" : "guest");
+        return {
+          authenticated: true,
+          keyId: key.keyId,
+          role
+        };
       }
     }
 

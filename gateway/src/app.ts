@@ -52,7 +52,9 @@ export function createApp(deps: AppDependencies): FastifyInstance {
   const quotaService = new QuotaService(
     deps.quotaRepository,
     deps.clock,
-    deps.config.dailyRequestQuota
+    deps.config.dailyRequestQuota,
+    deps.config.guestDailyQuota,
+    deps.config.guestRateLimitPerMinute
   );
 
   const inferenceService = new InferenceService(
@@ -117,6 +119,7 @@ export function createApp(deps: AppDependencies): FastifyInstance {
     }
 
     request.authKeyId = authResult.keyId;
+    request.authRole = authResult.role ?? (authResult.keyId.startsWith("owner") ? "owner" : "guest");
   });
 
   // Health endpoint

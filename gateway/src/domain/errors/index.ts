@@ -63,6 +63,16 @@ export class QuotaExceededError extends DomainError {
   }
 }
 
+export class RateLimitExceededError extends DomainError {
+  readonly statusCode = 429;
+  readonly errorType = "rate_limit_error";
+  readonly errorCode = "rate_limit_exceeded";
+
+  constructor(message = "Rate limit exceeded. Too many requests. Please slow down.") {
+    super(message);
+  }
+}
+
 export class ConcurrencyLimitError extends DomainError {
   readonly statusCode = 429;
   readonly errorType = "rate_limit_error";

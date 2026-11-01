@@ -472,8 +472,27 @@ For full benchmark telemetry, see [docs/benchmarks.md](docs/benchmarks.md).
 
 ---
 
-## 8. Verification & Testing
+## 8. Verification, Testing & End-to-End Flows
 
+### 8.1 End-to-End User Flows Runner
+Execute the complete suite of interactive end-to-end flows against the active stack (chat, multimodal vision, complex reasoning, SSE streaming, DDoS defense, and owner immunity):
+
+```bash
+# Run all live end-to-end flows
+pnpm flows
+# (or: pnpm tsx scripts/flows/run-all-flows.ts)
+```
+
+### 8.2 Role-Based Rate Limiting & DDoS Defense
+To protect against denial-of-service (DDoS) and API abuse while ensuring zero latency or interruption for the owner, EdgeInference enforces a multi-tier defense architecture:
+
+- **Owner ("Me")**: Authenticated via `LLM_API_SECRET`. Granted unlimited request rates and unlimited daily quota. Owner requests are exempt from Nginx rate-limiting zones and Fastify quota gates.
+- **Non-Owners ("Everyone Else")**: External clients or guest keys (`LLM_GUEST_API_KEYS`) are strictly throttled:
+  - **Nginx Reverse Proxy**: Limited to 6 requests/minute with a burst of 3 (`429 rate_limit_exceeded`).
+  - **Fastify Gateway**: Sliding-window rate limiter (default 3 requests/minute) plus persistent SQLite daily quota (default 10 requests/day).
+  - **DDoS Isolation**: If a guest or attacker floods the service, their requests are immediately blocked with HTTP 429 without impacting owner requests.
+
+### 8.3 Automated Verification Suite
 EdgeInference maintains a comprehensive test suite across unit, integration, and security vectors:
 
 ```bash
@@ -483,8 +502,14 @@ pnpm typecheck
 # Linting
 pnpm lint
 
-# Full test suite (115 tests across 17 suites)
+# Full test suite (129 tests across 19 suites)
 pnpm test
+
+# Automated End-to-End Flows test
+pnpm vitest run tests/integration/e2e-flows.test.ts
+
+# Role-Based Rate Limiting unit test
+pnpm vitest run tests/unit/quota-service.test.ts
 
 # Run security audit suite
 pnpm vitest run tests/integration/security-audit.test.ts

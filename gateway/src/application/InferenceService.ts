@@ -9,7 +9,8 @@ import type {
   InferenceResponse,
   InferenceEvent,
   InferenceLease,
-  ChatMessage
+  ChatMessage,
+  ClientRole
 } from "../domain/models/types.js";
 import { QuotaService } from "./QuotaService.js";
 import {
@@ -128,7 +129,8 @@ export class InferenceService {
     request: InferenceRequest,
     keyId: string,
     requestId: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    role: ClientRole = "owner"
   ): Promise<InferenceResponse> {
     const startTime = performance.now();
 
@@ -144,15 +146,15 @@ export class InferenceService {
       messages: processedMessages
     };
 
-    // 3. Atomic daily quota check
-    await this.quotaService.checkAndReserve(keyId);
+    // 3. Atomic daily quota / rate limit check
+    await this.quotaService.checkAndReserve(keyId, role);
 
     // 4. Concurrency lease acquisition (rollback quota if rejected or aborted while queued)
     let lease: InferenceLease;
     try {
       lease = await this.admissionController.acquire(signal);
     } catch (err) {
-      await this.quotaService.rollback(keyId);
+      await this.quotaService.rollback(keyId, role);
       throw err;
     }
 
@@ -197,7 +199,8 @@ export class InferenceService {
     request: InferenceRequest,
     keyId: string,
     requestId: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    role: ClientRole = "owner"
   ): AsyncIterable<InferenceEvent> {
     const startTime = performance.now();
 
@@ -213,15 +216,15 @@ export class InferenceService {
       messages: processedMessages
     };
 
-    // 3. Atomic daily quota check
-    await this.quotaService.checkAndReserve(keyId);
+    // 3. Atomic daily quota / rate limit check
+    await this.quotaService.checkAndReserve(keyId, role);
 
     // 4. Concurrency lease acquisition (rollback quota if rejected or aborted while queued)
     let lease: InferenceLease;
     try {
       lease = await this.admissionController.acquire(signal);
     } catch (err) {
-      await this.quotaService.rollback(keyId);
+      await this.quotaService.rollback(keyId, role);
       throw err;
     }
     let ttftMs: number | undefined;

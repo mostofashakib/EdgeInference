@@ -35,7 +35,7 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
 
     const deps: AppDependencies = {
       config,
-      authenticator: new BearerTokenAuthenticator([{ keyId: "test-key", secret }]),
+      authenticator: new BearerTokenAuthenticator([{ keyId: "test-key", secret, role: "owner" }]),
       inferenceClient: fakeClient,
       quotaRepository: new FakeQuotaRepository(),
       admissionController: new FakeAdmissionController(),
@@ -147,8 +147,8 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
     expect(fakeClient.streamCallCount).toBe(1);
   });
 
-  it("enforces Nginx request rate limit (6r/m burst 3) returning HTTP 429", async () => {
-    // Send 5 immediate requests; burst allows 3, initial request allows 1, 5th should trip 429
+  it("allows local owner requests to bypass Nginx rate limit without throttling", async () => {
+    // Send 6 rapid requests as local owner - all should succeed without 429
     const results = [];
     for (let i = 0; i < 6; i++) {
       const res = await fetch(`${nginxUrl}/v1/chat/completions`, {
@@ -159,7 +159,30 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
         },
         body: JSON.stringify({
           model: "qwen3.8:27b",
-          messages: [{ role: "user", content: `Burst test ${i}` }]
+          messages: [{ role: "user", content: `Owner burst test ${i}` }]
+        })
+      });
+      results.push(res.status);
+    }
+
+    // Owner is never rate limited
+    expect(results).toEqual([200, 200, 200, 200, 200, 200]);
+  });
+
+  it("enforces Nginx request rate limit (6r/m burst 3) for guest/non-owner returning HTTP 429", async () => {
+    // Send rapid requests as non-owner (X-Client-Role: guest); burst allows 3, initial allows 1, excess trips 429
+    const results = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await fetch(`${nginxUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${secret}`,
+          "X-Client-Role": "guest"
+        },
+        body: JSON.stringify({
+          model: "qwen3.8:27b",
+          messages: [{ role: "user", content: `Guest burst test ${i}` }]
         })
       });
       results.push(res.status);

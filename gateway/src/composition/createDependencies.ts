@@ -1,5 +1,5 @@
 import type { AppConfig } from "../config/AppConfig.js";
-import { BearerTokenAuthenticator } from "../infrastructure/auth/BearerTokenAuthenticator.js";
+import { BearerTokenAuthenticator, type ConfiguredKey } from "../infrastructure/auth/BearerTokenAuthenticator.js";
 import { CloudflareAccessValidator } from "../infrastructure/auth/CloudflareAccessValidator.js";
 import { SystemClock } from "../infrastructure/observability/SystemClock.js";
 import { StructuredMetricsRecorder } from "../infrastructure/observability/StructuredMetricsRecorder.js";
@@ -37,11 +37,16 @@ export function createDependencies(
   config: AppConfig,
   overrides: DependencyOverrides = {}
 ): AppDependencies {
-  const keys = [
-    { keyId: "primary", secret: config.primaryApiKey }
+  const keys: ConfiguredKey[] = [
+    { keyId: "owner-primary", secret: config.primaryApiKey, role: "owner" }
   ];
   if (config.secondaryApiKey) {
-    keys.push({ keyId: "secondary", secret: config.secondaryApiKey });
+    keys.push({ keyId: "owner-secondary", secret: config.secondaryApiKey, role: "owner" });
+  }
+  if (config.guestApiKeys && config.guestApiKeys.length > 0) {
+    config.guestApiKeys.forEach((guestSecret, idx) => {
+      keys.push({ keyId: `guest-${idx + 1}`, secret: guestSecret, role: "guest" });
+    });
   }
 
   const authenticator = overrides.authenticator ?? new BearerTokenAuthenticator(keys);

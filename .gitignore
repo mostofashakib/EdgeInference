@@ -43,6 +43,9 @@ Thumbs.db
 models/
 .ollama/
 
+# Documentation (local only)
+docs/
+
 # Cloudflare tunnel credentials
 cert.pem
 *.tunnel-token
