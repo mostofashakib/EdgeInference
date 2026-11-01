@@ -35,3 +35,4 @@ Key requirements:
 - Every component is fully unit testable in isolation.
 - Integration tests can exercise the full Fastify HTTP pipeline using `app.inject` with zero external network or database dependencies.
 - Zero secret leakage in logs, traces, or HTTP responses.
+

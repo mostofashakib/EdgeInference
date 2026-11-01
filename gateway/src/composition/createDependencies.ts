@@ -2,6 +2,8 @@ import type { AppConfig } from "../config/AppConfig.js";
 import { BearerTokenAuthenticator } from "../infrastructure/auth/BearerTokenAuthenticator.js";
 import { SystemClock } from "../infrastructure/observability/SystemClock.js";
 import { StructuredMetricsRecorder } from "../infrastructure/observability/StructuredMetricsRecorder.js";
+import { SharpImageProcessor } from "../infrastructure/images/SharpImageProcessor.js";
+import { OllamaInferenceClient } from "../infrastructure/ollama/OllamaInferenceClient.js";
 import type {
   InferenceClient,
   ApiKeyAuthenticator,
@@ -40,20 +42,26 @@ export function createDependencies(
   const authenticator = overrides.authenticator ?? new BearerTokenAuthenticator(keys);
   const clock = overrides.clock ?? new SystemClock();
   const metricsRecorder = overrides.metricsRecorder ?? new StructuredMetricsRecorder();
+  const imageProcessor = overrides.imageProcessor ?? new SharpImageProcessor({
+    maxBytes: config.maxImageBytes,
+    maxMegapixels: config.maxImageMegapixels,
+    allowedFormats: ["jpeg", "png", "webp"]
+  });
+  const inferenceClient = overrides.inferenceClient ?? new OllamaInferenceClient(config.ollamaBaseUrl);
 
-  if (!overrides.inferenceClient || !overrides.quotaRepository || !overrides.admissionController || !overrides.imageProcessor) {
+  if (!overrides.quotaRepository || !overrides.admissionController) {
     throw new Error(
-      "Infrastructure clients (inference, quota, admission, imageProcessor) must be supplied via overrides or concrete modules."
+      "Quota repository and admission controller must be supplied (M4 infrastructure)."
     );
   }
 
   return {
     config,
     authenticator,
-    inferenceClient: overrides.inferenceClient,
+    inferenceClient,
     quotaRepository: overrides.quotaRepository,
     admissionController: overrides.admissionController,
-    imageProcessor: overrides.imageProcessor,
+    imageProcessor,
     clock,
     metricsRecorder
   };

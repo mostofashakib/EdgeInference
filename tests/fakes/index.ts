@@ -154,3 +154,4 @@ export class FakeMetricsRecorder implements MetricsRecorder {
     this.recorded.push(metric);
   }
 }
+

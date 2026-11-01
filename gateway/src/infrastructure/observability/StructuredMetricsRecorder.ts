@@ -27,3 +27,4 @@ export class StructuredMetricsRecorder implements MetricsRecorder {
     }
   }
 }
+

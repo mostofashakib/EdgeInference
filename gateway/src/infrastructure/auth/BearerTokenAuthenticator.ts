@@ -44,3 +44,4 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
     return { authenticated: false, reason: "Invalid API secret" };
   }
 }
+
