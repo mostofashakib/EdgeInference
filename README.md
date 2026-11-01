@@ -4,6 +4,8 @@
 
 EdgeInference provides an OpenAI-compatible API gateway running `qwen3.8:27b` on Apple Silicon (M1 Max, 64GB unified memory) with 100% Metal GPU acceleration. It incorporates edge authorization, reverse-proxy rate limiting, atomic SQLite daily quotas, in-process concurrency management, Sharp-based multimodal image sanitization, and unbuffered SSE streaming.
 
+> 🤖 **AI Coding Agent Integration:** If you are building code or instructing an AI agent to consume this inference service, see [LLM.md](LLM.md) for concise schemas, copy-paste TypeScript/Python snippets, HMAC-SHA256 request signing, and retry strategies.
+
 ---
 
 ## 1. System Architecture

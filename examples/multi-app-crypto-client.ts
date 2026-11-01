@@ -121,3 +121,4 @@ async function main(): Promise<void> {
 if (process.argv[1] && process.argv[1].endsWith("multi-app-crypto-client.ts")) {
   main();
 }
+

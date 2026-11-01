@@ -54,3 +54,4 @@ export function createHashedBearerHeader(secret: string): { Authorization: strin
     Authorization: `Bearer ${hashSecretSha256(secret)}`
   };
 }
+
