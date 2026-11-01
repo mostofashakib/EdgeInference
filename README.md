@@ -518,9 +518,13 @@ Full runnable multi-application integration examples are available in [`examples
 Start or stop the entire stack with a single command (modeled after Forge):
 
 ```bash
-# Start all services (clears conflicting ports, verifies Ollama, boots Gateway and Nginx with colorized logs)
+# Start all local services (clears conflicting ports, verifies Ollama, boots Gateway and Nginx)
 ./run.sh
 # (or: pnpm start)
+
+# Start with Global Multi-Device Access (spins up Cloudflare encrypted HTTPS tunnel):
+./run.sh --tunnel
+# (or: pnpm start:tunnel)
 
 # Gracefully stop everything: press Ctrl+C in the running terminal, or run:
 ./kill.sh

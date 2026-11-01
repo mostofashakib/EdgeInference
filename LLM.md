@@ -9,13 +9,37 @@
 
 | Property | Value | Notes |
 | :--- | :--- | :--- |
-| **Primary Base URL** | `http://127.0.0.1:8080/v1` | Reverse-proxied via Nginx with unbuffered SSE streaming |
+| **Local Base URL** | `http://127.0.0.1:8080/v1` | Reverse-proxied via Nginx with unbuffered SSE streaming |
+| **Global Base URL** | `https://<tunnel-id>.trycloudflare.com/v1` | For access across all devices (mobile, other PCs, servers) via `./run.sh --tunnel` |
 | **Direct Gateway URL** | `http://127.0.0.1:8765/v1` | Direct Fastify gateway (bypasses Nginx) |
-| **Health Check** | `GET http://127.0.0.1:8080/health` | No authentication required; returns `{"status":"healthy"}` |
-| **Chat Endpoint** | `POST http://127.0.0.1:8080/v1/chat/completions` | Standard OpenAI schema |
+| **Health Check** | `GET /health` | No authentication required; returns `{"status":"healthy"}` |
+| **Chat Endpoint** | `POST /v1/chat/completions` | Standard OpenAI schema |
 | **Primary Model** | `qwen3.8:27b` | Multimodal (Vision + Text), deep reasoning, coding |
 | **Hardware Target** | Apple Silicon M1 Max (64GB unified memory) | 100% Metal GPU offload via MLX / Ollama |
 | **Wire Protocol** | JSON (`application/json`) / SSE (`text/event-stream`) | UTF-8 encoded |
+
+---
+
+### 1.1 Global Multi-Device Access (Mobile, Other Laptops, Remote Servers)
+
+To use this inference service from other devices (e.g., iPhone, Android, different laptops, or cloud services), start the stack with Cloudflare Tunnel enabled:
+
+```bash
+# Start with global encrypted HTTPS tunnel:
+./run.sh --tunnel
+# (or: pnpm start:tunnel)
+```
+
+The runner outputs your unique global HTTPS URL:
+```text
+  Global URL (All Devices) → https://your-tunnel-name.trycloudflare.com/v1/chat/completions
+  Global Health Check      → https://your-tunnel-name.trycloudflare.com/health
+```
+
+**Configuring Apps on External Devices:**
+1. Set the client `baseURL` or `ENDPOINT_URL` to `https://your-tunnel-name.trycloudflare.com/v1` (or your permanent custom domain if configured).
+2. Set the client `apiKey` to `LLM_API_SECRET` (or pre-hash it using SHA-256).
+3. The cryptographic authentication (HMAC-SHA256 and pre-hashed token) operates identically across local and global endpoints. Raw secrets are never transmitted.
 
 ---
 
@@ -370,3 +394,4 @@ pnpm flows
 # 3. Stop all services gracefully
 ./kill.sh
 ```
+

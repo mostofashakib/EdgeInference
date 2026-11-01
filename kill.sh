@@ -82,6 +82,7 @@ kill_pattern "tsx.*gateway/src/main"                  "Stray Fastify Gateway (ts
 kill_pattern "node.*dist/gateway/src/main"            "Stray Fastify Gateway (node)"
 kill_pattern "nginx: master process.*infra/nginx"     "Stray Nginx master"
 kill_pattern "nginx: worker process"                  "Stray Nginx worker"
+kill_pattern "cloudflared.*tunnel"                    "Cloudflare Tunnel"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""

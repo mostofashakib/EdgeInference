@@ -26,10 +26,19 @@ ok()   { echo -e "${GREEN}  ✓${RESET} $*"; }
 warn() { echo -e "${YELLOW}  ⚠${RESET} $*"; }
 err()  { echo -e "${RED}  ✗${RESET} $*"; }
 
+# ── Options & Flags ──────────────────────────────────────────────────────────
+ENABLE_TUNNEL=false
+for arg in "$@"; do
+  if [[ "$arg" == "--tunnel" || "$arg" == "-t" ]]; then
+    ENABLE_TUNNEL=true
+  fi
+done
+
 # ── Prefixed log streams ──────────────────────────────────────────────────────
 gateway_log() { while IFS= read -r line; do echo -e "${CYAN}[gateway]${RESET} $line"; done; }
 nginx_log()   { while IFS= read -r line; do echo -e "${GREEN}[nginx]  ${RESET} $line"; done; }
 ollama_log()  { while IFS= read -r line; do echo -e "${MAGENTA}[ollama] ${RESET} $line"; done; }
+tunnel_log()  { while IFS= read -r line; do echo -e "${YELLOW}[tunnel] ${RESET} $line"; done; }
 
 # ── Kill a port — uses nc for a fast check, lsof only to get the PIDs ────────
 kill_port() {
@@ -50,10 +59,22 @@ kill_port() {
 GATEWAY_PID=""
 NGINX_PID_FILE="$ROOT/infra/nginx/nginx.pid"
 SPAWNED_OLLAMA_PID=""
+TUNNEL_PID=""
+TUNNEL_LOG=""
+GLOBAL_URL=""
 
 cleanup() {
   echo ""
   log "Shutting down EdgeInference services..."
+
+  # Stop Cloudflare Tunnel
+  if [[ -n "$TUNNEL_PID" ]]; then
+    kill "$TUNNEL_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$TUNNEL_LOG" && -f "$TUNNEL_LOG" ]]; then
+    rm -f "$TUNNEL_LOG"
+  fi
+  pgrep -f "cloudflared.*tunnel.*8080" 2>/dev/null | xargs kill -9 2>/dev/null || true
 
   # Stop Gateway
   if [[ -n "$GATEWAY_PID" ]]; then
@@ -104,6 +125,11 @@ set -a
 # shellcheck source=/dev/null
 source "$ENV_FILE"
 set +a
+
+# Enable tunnel if configured in .env or passed via CLI
+if [[ "${TUNNEL:-false}" == "true" || "${CLOUDFLARE_TUNNEL_ENABLED:-false}" == "true" || -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+  ENABLE_TUNNEL=true
+fi
 
 # ── Ensure dependencies are installed ────────────────────────────────────────
 if [[ ! -d "$ROOT/node_modules" ]]; then
@@ -191,15 +217,58 @@ if ! curl -s "http://127.0.0.1:8080/health" 2>/dev/null | grep -q '"status":"hea
 fi
 ok "Nginx Reverse Proxy ready on port 8080"
 
+# ── Optional Cloudflare Tunnel for Global Multi-Device Access ────────────────
+if [[ "$ENABLE_TUNNEL" == "true" ]]; then
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    warn "cloudflared is not installed. Run 'brew install cloudflared' to enable global access across devices."
+  else
+    log "Starting Cloudflare Tunnel for global access across all devices..."
+    TUNNEL_LOG=$(mktemp -t edgeinference-tunnel.XXXXXX)
+
+    if [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
+      # Permanent Named Tunnel with custom domain
+      ( cloudflared tunnel run --token "$CLOUDFLARE_TUNNEL_TOKEN" 2>&1 ) | tunnel_log &
+      TUNNEL_PID=$!
+      ok "Cloudflare Permanent Tunnel connected (Token mode)"
+    else
+      # Quick Tunnel (Instant public HTTPS URL on trycloudflare.com)
+      cloudflared tunnel --url http://127.0.0.1:8080 > "$TUNNEL_LOG" 2>&1 &
+      TUNNEL_PID=$!
+
+      # Wait up to 10 seconds for the public trycloudflare.com URL
+      for _ in $(seq 1 50); do
+        GLOBAL_URL=$(grep -o 'https://[-a-zA-Z0-9\.]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -n 1 || true)
+        if [[ -n "$GLOBAL_URL" ]]; then
+          break
+        fi
+        sleep 0.2
+      done
+
+      if [[ -n "$GLOBAL_URL" ]]; then
+        ok "Cloudflare Quick Tunnel ready"
+      else
+        warn "Could not extract Quick Tunnel URL within 10s (tunnel running in background)"
+      fi
+    fi
+  fi
+fi
+
 # ── Ready Banner ─────────────────────────────────────────────────────────────
 echo ""
 echo -e "  ${BOLD}EdgeInference is running${RESET}"
-echo -e "  ${GREEN}Public / Nginx Ingress${RESET} → http://127.0.0.1:8080/v1/chat/completions"
-echo -e "  ${GREEN}Nginx Health Check   ${RESET} → http://127.0.0.1:8080/health"
+echo -e "  ${GREEN}Local Ingress        ${RESET} → http://127.0.0.1:8080/v1/chat/completions"
+echo -e "  ${GREEN}Local Health Check   ${RESET} → http://127.0.0.1:8080/health"
+if [[ -n "$GLOBAL_URL" ]]; then
+echo -e "  ${CYAN}${BOLD}Global URL (All Devices)${RESET} → ${CYAN}${BOLD}$GLOBAL_URL/v1/chat/completions${RESET}"
+echo -e "  ${CYAN}Global Health Check  ${RESET} → $GLOBAL_URL/health"
+fi
 echo -e "  ${CYAN}Gateway Direct       ${RESET} → http://127.0.0.1:$GATEWAY_PORT"
 echo -e "  ${MAGENTA}Ollama Upstream      ${RESET} → http://127.0.0.1:11434"
 echo -e "  ${BOLD}Model Target         ${RESET} → $TARGET_MODEL (100% Metal GPU)"
-echo -e "  ${YELLOW}Bearer Secret        ${RESET} → Loaded from local .env"
+echo -e "  ${YELLOW}Bearer Secret        ${RESET} → Loaded from local .env (HMAC/Pre-hash supported)"
+if [[ "$ENABLE_TUNNEL" == "false" ]]; then
+echo -e "  ${BOLD}Global Access Hint   ${RESET} → Run ${CYAN}./run.sh --tunnel${RESET} for global HTTPS access on any device"
+fi
 echo -e "  Press ${BOLD}Ctrl+C${RESET} to stop all"
 echo ""
 
