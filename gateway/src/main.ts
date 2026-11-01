@@ -1,6 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
 import { loadConfig } from "./config/AppConfig.js";
 import { createDependencies } from "./composition/createDependencies.js";
 import { createApp } from "./app.js";
+
+// Centralize local configuration: automatically load .env if present
+const envPath = path.resolve(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  process.loadEnvFile(envPath);
+}
 
 async function main(): Promise<void> {
   const config = loadConfig(process.env);

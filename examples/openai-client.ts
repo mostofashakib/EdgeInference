@@ -2,10 +2,16 @@ import OpenAI from "openai";
 import fs from "node:fs";
 import path from "node:path";
 
-// 1. Environment & Configuration
+// Centralize local credentials & configuration: automatically load .env if present
+const envPath = path.resolve(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  process.loadEnvFile(envPath);
+}
+
+// 1. Environment & Configuration (Centralized in .env)
 const LLM_BASE_URL = process.env.LLM_BASE_URL || "http://127.0.0.1:8080/v1";
 const LLM_MODEL = process.env.LLM_MODEL || "qwen3.8:27b";
-const LLM_API_SECRET = process.env.LLM_API_SECRET || "default_test_secret";
+const LLM_API_SECRET = process.env.LLM_API_SECRET;
 const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID;
 const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET;
 
@@ -17,6 +23,11 @@ if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
 }
 
 export function createInferenceClient(apiKey = LLM_API_SECRET, headers = defaultHeaders): OpenAI {
+  if (!apiKey) {
+    throw new Error(
+      "Missing LLM_API_SECRET. Please configure your API secret in your local .env file."
+    );
+  }
   return new OpenAI({
     baseURL: LLM_BASE_URL,
     apiKey,

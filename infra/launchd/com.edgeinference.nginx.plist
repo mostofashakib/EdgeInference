@@ -8,6 +8,8 @@
     <key>ProgramArguments</key>
     <array>
         <string>/opt/homebrew/bin/nginx</string>
+        <string>-p</string>
+        <string>/path/to/EdgeInference</string>
         <string>-c</string>
         <string>/path/to/EdgeInference/infra/nginx/nginx.conf</string>
         <string>-g</string>

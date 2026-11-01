@@ -13,10 +13,10 @@ EdgeInference utilizes macOS `launchd` for process supervision, automatic restar
    ```bash
    pnpm build
    ```
-2. Copy plists to user LaunchAgents:
+2. Copy plists to user LaunchAgents (substituting your project path):
    ```bash
-   cp infra/launchd/com.edgeinference.gateway.plist ~/Library/LaunchAgents/
-   cp infra/launchd/com.edgeinference.nginx.plist ~/Library/LaunchAgents/
+   sed "s|/path/to/EdgeInference|$(pwd)|g" infra/launchd/com.edgeinference.gateway.plist > ~/Library/LaunchAgents/com.edgeinference.gateway.plist
+   sed "s|/path/to/EdgeInference|$(pwd)|g" infra/launchd/com.edgeinference.nginx.plist > ~/Library/LaunchAgents/com.edgeinference.nginx.plist
    ```
 3. Load the services:
    ```bash

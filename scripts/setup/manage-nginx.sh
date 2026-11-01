@@ -13,14 +13,14 @@ case "${ACTION}" in
     if [ -f "${NGINX_PID}" ] && kill -0 "$(cat "${NGINX_PID}")" 2>/dev/null; then
       echo "Nginx is already running (PID $(cat "${NGINX_PID}"))"
     else
-      nginx -t -c "${NGINX_CONF}"
-      nginx -c "${NGINX_CONF}"
+      nginx -p "${PROJECT_ROOT}" -t -c "${NGINX_CONF}"
+      nginx -p "${PROJECT_ROOT}" -c "${NGINX_CONF}"
       echo "Nginx started on 127.0.0.1:8080 (PID $(cat "${NGINX_PID}"))"
     fi
     ;;
   stop)
     if [ -f "${NGINX_PID}" ] && kill -0 "$(cat "${NGINX_PID}")" 2>/dev/null; then
-      nginx -c "${NGINX_CONF}" -s stop || true
+      nginx -p "${PROJECT_ROOT}" -c "${NGINX_CONF}" -s stop || true
       rm -f "${NGINX_PID}"
       echo "Nginx stopped"
     else
@@ -28,12 +28,12 @@ case "${ACTION}" in
     fi
     ;;
   reload)
-    nginx -t -c "${NGINX_CONF}"
-    nginx -c "${NGINX_CONF}" -s reload
+    nginx -p "${PROJECT_ROOT}" -t -c "${NGINX_CONF}"
+    nginx -p "${PROJECT_ROOT}" -c "${NGINX_CONF}" -s reload
     echo "Nginx reloaded successfully"
     ;;
   test)
-    nginx -t -c "${NGINX_CONF}"
+    nginx -p "${PROJECT_ROOT}" -t -c "${NGINX_CONF}"
     ;;
   status)
     if [ -f "${NGINX_PID}" ] && kill -0 "$(cat "${NGINX_PID}")" 2>/dev/null; then

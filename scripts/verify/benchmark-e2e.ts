@@ -10,7 +10,13 @@ import { SystemClock } from "../../gateway/src/infrastructure/observability/Syst
 import { StructuredMetricsRecorder } from "../../gateway/src/infrastructure/observability/StructuredMetricsRecorder.js";
 import { loadConfig } from "../../gateway/src/config/AppConfig.js";
 
-const TEST_SECRET = "b".repeat(64);
+// Centralize local configuration: automatically load .env if present
+const envPath = path.resolve(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  process.loadEnvFile(envPath);
+}
+
+const TEST_SECRET = process.env.LLM_API_SECRET || "b".repeat(64);
 const OLLAMA_URL = "http://127.0.0.1:11434";
 const GATEWAY_URL = "http://127.0.0.1:8765";
 const NGINX_URL = "http://127.0.0.1:8080";

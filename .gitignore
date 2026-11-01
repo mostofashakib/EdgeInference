@@ -37,6 +37,7 @@ pnpm-debug.log*
 # OS artifacts
 .DS_Store
 Thumbs.db
+*.pid
 
 # Ollama models and cache
 models/

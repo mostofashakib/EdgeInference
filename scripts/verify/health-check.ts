@@ -1,3 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
+
+// Centralize local configuration: automatically load .env if present
+const envPath = path.resolve(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  process.loadEnvFile(envPath);
+}
+
 interface ServiceHealth {
   name: string;
   url: string;

@@ -2,7 +2,7 @@
 # File: infra/cloudflare/config.yml
 
 tunnel: <YOUR_TUNNEL_UUID>
-credentials-file: /path/to/.cloudflared/<YOUR_TUNNEL_UUID>.json
+credentials-file: /Users/<YOUR_USERNAME>/.cloudflared/<YOUR_TUNNEL_UUID>.json
 
 ingress:
   # Route public hostname to local Nginx reverse proxy
