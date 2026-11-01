@@ -452,8 +452,6 @@ launchctl load ~/Library/LaunchAgents/com.edgeinference.gateway.plist
 launchctl load ~/Library/LaunchAgents/com.edgeinference.nginx.plist
 ```
 
-For full operations, backups, and disaster recovery procedures, see [docs/runbook.md](docs/runbook.md).
-
 ---
 
 ## 7. Performance Benchmarks
@@ -467,8 +465,6 @@ Measured on Apple M1 Max (64GB RAM):
 - **Gateway Pipeline Overhead**: $\le 25\text{ ms}$
 - **Nginx Proxy Overhead**: $\le 40\text{ ms}$ (unbuffered SSE streaming)
 - **VRAM Footprint**: 20.09 GB (100% Metal GPU offload via MLX runner)
-
-For full benchmark telemetry, see [docs/benchmarks.md](docs/benchmarks.md).
 
 ---
 
@@ -520,12 +516,6 @@ pnpm audit --prod
 
 ---
 
-## 9. Architecture Decisions & Documentation Index
+## 9. Infrastructure & Setup References
 
-- [Architecture Overview](docs/architecture.md)
-- [Threat Model & Mitigations](docs/threat-model.md)
-- [Operations Runbook](docs/runbook.md)
-- [API Contract Specification](docs/api-contract.md)
-- [Performance Benchmarks](docs/benchmarks.md)
 - [Cloudflare Tunnel & Access Setup](infra/cloudflare/README.md)
-- [Architecture Decision Records (ADRs)](docs/decisions/)
