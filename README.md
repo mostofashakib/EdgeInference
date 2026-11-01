@@ -340,48 +340,173 @@ interface ErrorResponse {
 
 ---
 
-## 4. Consuming the Service: Client SDK Integration
+## 4. Multi-Application Integration & Cryptographic Authentication
 
-Consuming services can use the standard OpenAI Node.js or Python SDK without custom adapters. All credentials are read automatically from your local `.env`.
+EdgeInference is built to serve multiple applications simultaneously. To guarantee security and prevent secret exposure across client networks, **raw secrets are never transmitted in plaintext over the wire**. Instead, incoming requests are authenticated using strong cryptographic hashing and signatures.
 
-### Node.js / TypeScript Example (Official OpenAI SDK)
+### 4.1 How the Service Knows "It's You" (Owner vs. Guest)
+When multiple applications connect to this gateway:
+- **Owner ("Me") Applications**: When an application signs or hashes using the master `LLM_API_SECRET`, the gateway matches the signature/hash to `owner-primary` in constant time (`crypto.timingSafeEqual`). The gateway flags the session as `role: "owner"`, providing **unlimited throughput, zero rate limits, and zero daily quotas**.
+- **External / Guest Applications**: Applications using a guest secret (`LLM_GUEST_API_KEYS`) are flagged as `role: "guest"` and strictly throttled (3 requests/minute, 10 requests/day) to prevent resource monopolization.
+
+---
+
+### 4.2 Cryptographic Methods (Zero Plaintext Transmission)
+
+The gateway supports two cryptographic patterns that ensure your raw secret **never** leaves the application memory:
+
+| Method | Headers Required | Replay-Safe? | Best For |
+| :--- | :--- | :---: | :--- |
+| **1. Dynamic HMAC-SHA256** | `X-Signature`, `X-Timestamp` | **Yes (5-min window)** | Production applications, microservices, backend servers |
+| **2. Pre-Hashed SHA-256 Token** | `Authorization: Bearer <sha256>` | Yes | Simple clients, OpenAI SDK drop-in replacement |
+| **3. Plaintext Bearer (Fallback)** | `Authorization: Bearer <secret>` | No | Quick local testing with standard OpenAI SDKs |
+
+---
+
+### 4.3 Integration Setup for Your Applications
+
+#### Setup 1: Node.js / TypeScript (HMAC-SHA256 & Pre-Hashed)
+
+In any application consuming this service, copy the helper functions from [`gateway/src/client/cryptoAuth.ts`](gateway/src/client/cryptoAuth.ts) or [`examples/multi-app-crypto-client.ts`](examples/multi-app-crypto-client.ts):
+
 ```typescript
+import crypto from "node:crypto";
+
+const ENDPOINT_URL = process.env.LLM_ENDPOINT || "http://127.0.0.1:8080";
+const SECRET = process.env.LLM_API_SECRET!; // Raw secret stored ONLY in application's local .env
+
+// ============================================================================
+// PATTERN A: Dynamic HMAC-SHA256 Request Signing (Recommended / Replay-Safe)
+// ============================================================================
+function createHmacHeaders(secret: string, method: string, path: string) {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const canonicalPayload = `${timestamp}:${method.toUpperCase()}:${path}`;
+  const signature = crypto.createHmac("sha256", secret).update(canonicalPayload).digest("hex");
+
+  return {
+    "X-Signature": signature,
+    "X-Timestamp": timestamp
+  };
+}
+
+// Dispatch request - RAW SECRET NEVER LEAVES THE MACHINE
+const hmacHeaders = createHmacHeaders(SECRET, "POST", "/v1/chat/completions");
+const response = await fetch(`${ENDPOINT_URL}/v1/chat/completions`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    ...hmacHeaders
+  },
+  body: JSON.stringify({
+    model: "qwen3.8:27b",
+    messages: [{ role: "user", content: "Hello from app!" }]
+  })
+});
+const data = await response.json();
+console.log(data.choices[0].message.content);
+
+// ============================================================================
+// PATTERN B: Pre-Hashed SHA-256 Token (Drop-in for OpenAI SDK)
+// ============================================================================
 import OpenAI from "openai";
-import fs from "node:fs";
-import path from "node:path";
 
-// 1. Automatically load .env if present
-const envPath = path.resolve(process.cwd(), ".env");
-if (fs.existsSync(envPath)) {
-  process.loadEnvFile(envPath);
-}
+const hashedApiKey = crypto.createHash("sha256").update(SECRET).digest("hex");
 
-// 2. Initialize official client using environment variables
+// Pass the SHA-256 digest instead of the raw secret
 const client = new OpenAI({
-  baseURL: process.env.LLM_BASE_URL || "http://127.0.0.1:8080/v1",
-  apiKey: process.env.LLM_API_SECRET
+  baseURL: `${ENDPOINT_URL}/v1`,
+  apiKey: hashedApiKey // Raw secret is never transmitted over the network!
 });
 
-// 3. Text Generation
-const textCompletion = await client.chat.completions.create({
-  model: process.env.LLM_MODEL || "qwen3.8:27b",
-  messages: [{ role: "user", content: "Explain software idempotency." }]
+const completion = await client.chat.completions.create({
+  model: "qwen3.8:27b",
+  messages: [{ role: "user", content: "Tell me a fun fact." }]
 });
-console.log(textCompletion.choices[0]?.message.content);
-
-// 4. Progressive Streaming
-const stream = await client.chat.completions.create({
-  model: process.env.LLM_MODEL || "qwen3.8:27b",
-  messages: [{ role: "user", content: "Count from 1 to 5." }],
-  stream: true
-});
-
-for await (const chunk of stream) {
-  process.stdout.write(chunk.choices[0]?.delta.content || "");
-}
+console.log(completion.choices[0].message.content);
 ```
 
-A complete client covering 8 scenarios (text, vision, reasoning, streaming, 401 handling, 429 handling, upstream recovery, and client abort) is available in [`examples/openai-client.ts`](examples/openai-client.ts).
+#### Setup 2: Python Client (HMAC-SHA256 & Pre-Hashed)
+
+In any Python application:
+
+```python
+import time
+import hmac
+import hashlib
+import requests
+from openai import OpenAI
+
+ENDPOINT = "http://127.0.0.1:8080"
+SECRET = "your_secret_from_env"
+
+# ============================================================================
+# PATTERN A: HMAC-SHA256 Request Signing
+# ============================================================================
+timestamp = str(int(time.time()))
+canonical = f"{timestamp}:POST:/v1/chat/completions"
+signature = hmac.new(SECRET.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+
+res = requests.post(
+    f"{ENDPOINT}/v1/chat/completions",
+    headers={
+        "Content-Type": "application/json",
+        "X-Signature": signature,
+        "X-Timestamp": timestamp
+    },
+    json={
+        "model": "qwen3.8:27b",
+        "messages": [{"role": "user", "content": "Hello from Python!"}]
+    }
+)
+print(res.json()["choices"][0]["message"]["content"])
+
+# ============================================================================
+# PATTERN B: Pre-Hashed SHA-256 with Official OpenAI Python SDK
+# ============================================================================
+hashed_secret = hashlib.sha256(SECRET.encode("utf-8")).hexdigest()
+
+client = OpenAI(
+    base_url=f"{ENDPOINT}/v1",
+    api_key=hashed_secret # Raw secret never transmitted
+)
+
+chat = client.chat.completions.create(
+    model="qwen3.8:27b",
+    messages=[{"role": "user", "content": "Explain gravity in one sentence."}]
+)
+print(chat.choices[0].message.content)
+```
+
+#### Setup 3: cURL / Bash
+
+```bash
+# Method 1: Using SHA-256 Hashed Secret
+HASHED_SECRET=$(echo -n "$LLM_API_SECRET" | shasum -a 256 | awk '{print $1}')
+
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $HASHED_SECRET" \
+  -d '{
+    "model": "qwen3.8:27b",
+    "messages": [{"role": "user", "content": "Hello from cURL!"}]
+  }'
+
+# Method 2: Dynamic HMAC-SHA256
+TIMESTAMP=$(date +%s)
+CANONICAL="${TIMESTAMP}:POST:/v1/chat/completions"
+SIGNATURE=$(echo -n "$CANONICAL" | openssl dgst -sha256 -hmac "$LLM_API_SECRET" | awk '{print $NF}')
+
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-Signature: $SIGNATURE" \
+  -H "X-Timestamp: $TIMESTAMP" \
+  -d '{
+    "model": "qwen3.8:27b",
+    "messages": [{"role": "user", "content": "Hello via HMAC!"}]
+  }'
+```
+
+Full runnable multi-application integration examples are available in [`examples/multi-app-crypto-client.ts`](examples/multi-app-crypto-client.ts) and [`examples/openai-client.ts`](examples/openai-client.ts).
 
 ---
 

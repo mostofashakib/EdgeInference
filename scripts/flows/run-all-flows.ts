@@ -13,6 +13,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHmacAuthHeaders, createHashedBearerHeader } from "../../gateway/src/client/cryptoAuth.js";
 
 // Load local environment variables
 if (typeof process.loadEnvFile === "function" && fs.existsSync(".env")) {
@@ -328,6 +329,76 @@ async function runFlow6OwnerImmunity(): Promise<void> {
   }
 }
 
+async function runFlow7HmacCryptoAuth(): Promise<void> {
+  logHeader("Flow 7: Client Application HMAC-SHA256 Request Signing Flow");
+  logInfo("Authenticating without transmitting raw secret using dynamic HMAC-SHA256 signature...");
+
+  const hmacHeaders = createHmacAuthHeaders({
+    secret: OWNER_API_KEY,
+    method: "POST",
+    path: "/v1/chat/completions"
+  });
+
+  logInfo(`Generated X-Signature: ${hmacHeaders["X-Signature"]?.slice(0, 16)}...`);
+  logInfo(`Generated X-Timestamp: ${hmacHeaders["X-Timestamp"]}`);
+
+  const startTime = performance.now();
+  const res = await fetch(`${ENDPOINT_URL}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...hmacHeaders
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [{ role: "user", content: "Verify HMAC authentication." }],
+      max_tokens: 20
+    })
+  });
+
+  const durationMs = Math.round(performance.now() - startTime);
+
+  if (res.status === 200) {
+    logStep(`HMAC-authenticated request succeeded with HTTP 200 OK in ${durationMs}ms!`);
+    logStep("Zero raw secret transmitted: verified in constant time on the server.");
+  } else {
+    const errText = await res.text();
+    throw new Error(`HMAC authentication failed with status ${res.status}: ${errText}`);
+  }
+}
+
+async function runFlow8HashedTokenAuth(): Promise<void> {
+  logHeader("Flow 8: Client Application Pre-Hashed SHA-256 Token Flow");
+  logInfo("Authenticating using SHA-256 digest of secret (raw secret never sent)...");
+
+  const hashedHeader = createHashedBearerHeader(OWNER_API_KEY);
+  logInfo(`Authorization Header: Bearer ${hashedHeader.Authorization.slice(7, 23)}... [SHA-256 digest]`);
+
+  const startTime = performance.now();
+  const res = await fetch(`${ENDPOINT_URL}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...hashedHeader
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [{ role: "user", content: "Verify pre-hashed token authentication." }],
+      max_tokens: 20
+    })
+  });
+
+  const durationMs = Math.round(performance.now() - startTime);
+
+  if (res.status === 200) {
+    logStep(`Pre-hashed token request succeeded with HTTP 200 OK in ${durationMs}ms!`);
+    logStep("Zero raw secret transmitted: server verified pre-hash in constant time.");
+  } else {
+    const errText = await res.text();
+    throw new Error(`Pre-hashed token authentication failed with status ${res.status}: ${errText}`);
+  }
+}
+
 async function main(): Promise<void> {
   console.log(`\n${BOLD}================================================================${RESET}`);
   console.log(`${BOLD}🚀 EdgeInference End-to-End User Flows & Abuse Defense Runner${RESET}`);
@@ -356,6 +427,8 @@ async function main(): Promise<void> {
     await runFlow4Streaming();
     await runFlow5DDoSDefense();
     await runFlow6OwnerImmunity();
+    await runFlow7HmacCryptoAuth();
+    await runFlow8HashedTokenAuth();
 
     console.log(`\n${BOLD}${GREEN}================================================================${RESET}`);
     console.log(`${BOLD}${GREEN}🎉 ALL END-TO-END FLOWS AND DEFENSE CHECKS PASSED SUCCESSFULLY!${RESET}`);

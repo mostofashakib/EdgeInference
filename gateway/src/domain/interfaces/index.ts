@@ -15,8 +15,18 @@ export interface InferenceClient {
   stream(request: InferenceRequest, signal?: AbortSignal): AsyncIterable<InferenceEvent> | Promise<AsyncIterable<InferenceEvent>>;
 }
 
+export interface RequestAuthContext {
+  headers?: Record<string, string | string[] | undefined> | undefined;
+  method?: string | undefined;
+  url?: string | undefined;
+  now?: Date | undefined;
+}
+
 export interface ApiKeyAuthenticator {
-  authenticate(authorizationHeader?: string): AuthenticationResult;
+  authenticate(
+    authorizationHeader?: string,
+    context?: RequestAuthContext
+  ): AuthenticationResult;
 }
 
 export interface AccessValidator {

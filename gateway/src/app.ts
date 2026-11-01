@@ -38,6 +38,9 @@ export function createApp(deps: AppDependencies): FastifyInstance {
           "req.headers['authorization']",
           "req.headers['cf-access-client-secret']",
           "req.headers['cf-access-client-id']",
+          "req.headers['x-signature']",
+          "req.headers['x-signature-256']",
+          "req.headers['x-hashed-token']",
           "req.headers.cookie",
           "*.apiSecret",
           "*.secret",
@@ -110,9 +113,14 @@ export function createApp(deps: AppDependencies): FastifyInstance {
       }
     }
 
-    // Step 2: Gateway Bearer API Secret Validation
+    // Step 2: Gateway Cryptographic Authentication (HMAC-SHA256, Pre-hashed Token, or Bearer)
     const authHeader = request.headers.authorization;
-    const authResult = deps.authenticator.authenticate(authHeader);
+    const authResult = deps.authenticator.authenticate(authHeader, {
+      headers: request.headers,
+      method: request.method,
+      url: request.url,
+      now: deps.clock.now()
+    });
 
     if (!authResult.authenticated) {
       throw new UnauthorizedError(authResult.reason || "Unauthorized");

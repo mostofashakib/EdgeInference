@@ -5,6 +5,7 @@ import path from "node:path";
 import { createApp, type AppDependencies } from "../../gateway/src/app.js";
 import { BearerTokenAuthenticator } from "../../gateway/src/infrastructure/auth/BearerTokenAuthenticator.js";
 import { loadConfig } from "../../gateway/src/config/AppConfig.js";
+import { createHmacAuthHeaders, hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import {
   FakeInferenceClient,
   FakeQuotaRepository,
@@ -332,6 +333,62 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
       }
     });
     expect(r2.statusCode).toBe(401);
+  });
+
+  // FLOW 9: Multi-Application HMAC-SHA256 Cryptographic Request Signing Flow
+  it("Flow 9: Client application authenticates via dynamic HMAC-SHA256 signature without transmitting raw secret", async () => {
+    // Generate signature using client helper matching clock; raw secret never goes over HTTP
+    const hmacHeaders = createHmacAuthHeaders({
+      secret: ownerSecret,
+      method: "POST",
+      path: "/v1/chat/completions",
+      timestamp: Math.floor(fakeClock.now().getTime() / 1000)
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      headers: {
+        "content-type": "application/json",
+        ...hmacHeaders
+      },
+      payload: {
+        model: "qwen3.8:27b",
+        messages: [
+          { role: "user", content: "Authenticate securely via HMAC-SHA256." }
+        ]
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.choices[0].message.content).toBe("Hello from FakeInferenceClient!");
+    expect(fakeInference.generateCallCount).toBe(1);
+  });
+
+  // FLOW 10: Multi-Application Pre-Hashed SHA-256 Token Flow
+  it("Flow 10: Client application authenticates via pre-hashed SHA-256 token without transmitting raw secret", async () => {
+    // Client pre-hashes secret locally; raw secret is never transmitted
+    const hashedSecret = hashSecretSha256(ownerSecret);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/chat/completions",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${hashedSecret}`
+      },
+      payload: {
+        model: "qwen3.8:27b",
+        messages: [
+          { role: "user", content: "Authenticate securely via pre-hashed token." }
+        ]
+      }
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.choices[0].message.content).toBe("Hello from FakeInferenceClient!");
   });
 });
 
