@@ -91,3 +91,4 @@ else
   echo -e "${YELLOW}No EdgeInference processes were running.${RESET}"
 fi
 echo ""
+
