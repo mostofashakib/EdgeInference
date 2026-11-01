@@ -385,9 +385,22 @@ A complete client covering 8 scenarios (text, vision, reasoning, streaming, 401 
 
 ---
 
-## 5. Quick Start & Setup
+## 5. Quick Start & Running Services
 
-### 5.1 Prerequisites
+### 5.1 One-Command Runner (`run.sh` & `kill.sh`)
+Start or stop the entire stack with a single command (modeled after Forge):
+
+```bash
+# Start all services (clears conflicting ports, verifies Ollama, boots Gateway and Nginx with colorized logs)
+./run.sh
+# (or: pnpm start)
+
+# Gracefully stop everything: press Ctrl+C in the running terminal, or run:
+./kill.sh
+# (or: pnpm stop)
+```
+
+### 5.2 Prerequisites
 - Apple Silicon Mac with $\ge 32\text{ GB}$ unified memory (64 GB recommended).
 - Ollama installed and running with `qwen3.8:27b`:
   ```bash
@@ -399,29 +412,23 @@ A complete client covering 8 scenarios (text, vision, reasoning, streaming, 401 
   export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
   ```
 
-### 5.2 Installation & Build
-```bash
-# Install dependencies
-pnpm install
+### 5.3 Manual Step-by-Step Execution
+If you prefer running components individually:
 
-# Verify environment readiness
-pnpm verify:env
-
-# Compile TypeScript
-pnpm build
-```
-
-### 5.3 Start Services
-
-1. **Start Nginx Reverse Proxy**:
+1. **Install Dependencies & Build**:
+   ```bash
+   pnpm install
+   pnpm build
+   ```
+2. **Start Nginx Reverse Proxy**:
    ```bash
    ./scripts/setup/manage-nginx.sh start
    ```
-2. **Start Fastify Gateway**:
+3. **Start Fastify Gateway**:
    ```bash
    pnpm tsx gateway/src/main.ts
    ```
-3. **Verify Pipeline Readiness**:
+4. **Verify Pipeline Readiness**:
    ```bash
    pnpm tsx scripts/verify/health-check.ts
    ```

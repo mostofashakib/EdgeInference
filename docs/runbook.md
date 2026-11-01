@@ -20,7 +20,21 @@ EdgeInference provides a secure, self-hosted multimodal LLM inference service on
 
 ## 2. Startup & Shutdown Sequences
 
-### 2.1 Startup Sequence (Dependency Order)
+### 2.0 Unified Runner (`run.sh` and `kill.sh`)
+
+For single-command startup and shutdown with colorized log streams:
+
+```bash
+# Start all services with automated port clearing & health validation:
+./run.sh
+# (or: pnpm start)
+
+# Stop all running EdgeInference processes:
+./kill.sh
+# (or: pnpm stop)
+```
+
+### 2.1 Startup Sequence (Manual / Dependency Order)
 
 Services must start in the following order:
 
