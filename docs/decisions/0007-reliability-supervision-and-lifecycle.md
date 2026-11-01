@@ -39,3 +39,4 @@ A self-hosted edge inference service running on macOS Apple Silicon must maintai
 - Zero third-party process managers (e.g. PM2, Docker) required; leverages macOS native subsystems.
 - Client cancellations do not exhaust users' daily quotas or strand GPU compute slots.
 - Integration tests confirm full compatibility with the official OpenAI SDK for text, multimodal vision, reasoning, streaming, and error states.
+
