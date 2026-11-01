@@ -92,6 +92,13 @@ export class SqliteQuotaRepository implements QuotaRepository {
       .run(nowIso, keyId, period);
   }
 
+  getUsedCount(keyId: string, period: string): number {
+    const row = this.db
+      .prepare("SELECT used_count FROM daily_quotas WHERE key_id = ? AND period = ?")
+      .get(keyId, period) as { used_count: number } | undefined;
+    return row?.used_count ?? 0;
+  }
+
   close(): void {
     if (this.db.open) {
       this.db.close();

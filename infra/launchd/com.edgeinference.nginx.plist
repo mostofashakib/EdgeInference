@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.edgeinference.nginx</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/nginx</string>
+        <string>-c</string>
+        <string>/path/to/EdgeInference/infra/nginx/nginx.conf</string>
+        <string>-g</string>
+        <string>daemon off;</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/path/to/EdgeInference</string>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/path/to/EdgeInference/infra/nginx/access.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/path/to/EdgeInference/infra/nginx/error.log</string>
+</dict>
+</plist>
+

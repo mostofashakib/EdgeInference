@@ -35,6 +35,13 @@ export class SemaphoreAdmissionController implements AdmissionController {
     return this.queue.length;
   }
 
+  getSnapshot(): { activeCount: number; queueLength: number } {
+    return {
+      activeCount: this.active,
+      queueLength: this.queue.length
+    };
+  }
+
   private createLease(): InferenceLease {
     let released = false;
     const leaseId = `lease-${crypto.randomUUID()}`;

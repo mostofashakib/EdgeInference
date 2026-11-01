@@ -29,8 +29,8 @@ export class ChatCompletionController {
 
     const body = parseResult.data;
     const abortController = new AbortController();
-    req.raw.on("close", () => {
-      if (req.raw.destroyed) {
+    reply.raw.on("close", () => {
+      if (!reply.raw.writableEnded) {
         abortController.abort();
       }
     });

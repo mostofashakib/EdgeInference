@@ -21,6 +21,10 @@ export class FakeInferenceClient implements InferenceClient {
   public generateCallCount = 0;
   public streamCallCount = 0;
   public lastRequest?: InferenceRequest;
+  public delayMs = 0;
+  public shouldFail = false;
+  public failureError?: Error | undefined;
+
   public cannedResponse: InferenceResponse = {
     id: "fake-chatcmpl-123",
     object: "chat.completion",
@@ -67,16 +71,95 @@ export class FakeInferenceClient implements InferenceClient {
     }
   ];
 
-  async generate(request: InferenceRequest, _signal?: AbortSignal): Promise<InferenceResponse> {
+  setDefaultText(text: string): void {
+    this.cannedResponse.choices[0] = {
+      index: 0,
+      message: {
+        role: "assistant",
+        content: text
+      },
+      finish_reason: "stop"
+    };
+  }
+
+  setStreamChunks(chunks: string[]): void {
+    this.cannedEvents = chunks.map((chunk, idx) => ({
+      id: "fake-chatcmpl-123",
+      object: "chat.completion.chunk" as const,
+      created: 1730000000,
+      model: "qwen3.8:27b",
+      choices: [
+        {
+          index: 0,
+          delta: { content: chunk },
+          finish_reason: idx === chunks.length - 1 ? ("stop" as const) : null
+        }
+      ]
+    }));
+  }
+
+  setShouldFail(shouldFail: boolean, error?: Error): void {
+    this.shouldFail = shouldFail;
+    this.failureError = error;
+  }
+
+  setResponseDelay(delayMs: number): void {
+    this.delayMs = delayMs;
+  }
+
+  async generate(request: InferenceRequest, signal?: AbortSignal): Promise<InferenceResponse> {
     this.generateCallCount++;
     this.lastRequest = request;
+
+    if (this.delayMs > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, this.delayMs);
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            const err = new Error("Aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        }
+      });
+    }
+
+    if (this.shouldFail) {
+      throw this.failureError ?? new Error("Simulated upstream failure");
+    }
+
     return this.cannedResponse;
   }
 
-  async *stream(request: InferenceRequest, _signal?: AbortSignal): AsyncIterable<InferenceEvent> {
+  async *stream(request: InferenceRequest, signal?: AbortSignal): AsyncIterable<InferenceEvent> {
     this.streamCallCount++;
     this.lastRequest = request;
+
+    if (this.delayMs > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, this.delayMs);
+        if (signal) {
+          signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            const err = new Error("Aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        }
+      });
+    }
+
+    if (this.shouldFail) {
+      throw this.failureError ?? new Error("Simulated upstream failure");
+    }
+
     for (const evt of this.cannedEvents) {
+      if (signal?.aborted) {
+        const err = new Error("Aborted");
+        err.name = "AbortError";
+        throw err;
+      }
       yield evt;
     }
   }

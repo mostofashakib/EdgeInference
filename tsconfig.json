@@ -32,6 +32,7 @@
     "gateway/src/**/*",
     "tests/**/*",
     "scripts/**/*",
+    "examples/**/*",
     "vitest.config.ts"
   ],
   "exclude": [
