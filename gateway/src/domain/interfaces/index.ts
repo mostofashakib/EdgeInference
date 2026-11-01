@@ -1,0 +1,40 @@
+import type {
+  InferenceRequest,
+  InferenceResponse,
+  InferenceEvent,
+  AuthenticationResult,
+  QuotaReservation,
+  InferenceLease,
+  ImageInput,
+  NormalizedImage,
+  RequestMetric
+} from "../models/types.js";
+
+export interface InferenceClient {
+  generate(request: InferenceRequest, signal?: AbortSignal): Promise<InferenceResponse>;
+  stream(request: InferenceRequest, signal?: AbortSignal): AsyncIterable<InferenceEvent> | Promise<AsyncIterable<InferenceEvent>>;
+}
+
+export interface ApiKeyAuthenticator {
+  authenticate(authorizationHeader?: string): AuthenticationResult;
+}
+
+export interface QuotaRepository {
+  reserve(keyId: string, period: string, limit: number): Promise<QuotaReservation>;
+}
+
+export interface AdmissionController {
+  acquire(signal?: AbortSignal): Promise<InferenceLease>;
+}
+
+export interface ImageProcessor {
+  validateAndNormalize(input: ImageInput): Promise<NormalizedImage>;
+}
+
+export interface Clock {
+  now(): Date;
+}
+
+export interface MetricsRecorder {
+  recordRequest(metric: RequestMetric): void;
+}

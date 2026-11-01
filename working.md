@@ -4,15 +4,15 @@
 Secure Local LLM Inference Service
 
 ## Current Milestone
-M1 — Local Model Inference (COMPLETED) -> Transitioning to M2 (API Skeleton, DI, and Authentication)
+M2 — API Skeleton, Dependency Injection, and Authentication (COMPLETED) -> Transitioning to M3 (Request Validation and Inference Gateway)
 
 ## Milestone Status
-M1_COMPLETED
+M2_COMPLETED
 
 ## Overall Progress
 - [x] M0: Environment and foundation
 - [x] M1: Local model inference
-- [ ] M2: API skeleton, DI, and authentication
+- [x] M2: API skeleton, DI, and authentication
 - [ ] M3: Request validation and inference gateway
 - [ ] M4: Resource management and streaming
 - [ ] M5: Nginx and rate limiting
@@ -20,66 +20,74 @@ M1_COMPLETED
 - [ ] M7: Reliability and end-to-end testing
 - [ ] M8: Performance and security review
 
-## Current Tasks (M1 Completed, M2 Active)
-- [x] M1: Audit Ollama runtime: server v0.40.13 running via `/Applications/Ollama.app` on `127.0.0.1:11434`.
-- [x] M1: Download `qwen3.8:27b` (18 GB nvfp4 quantized, digest `47951e4a6661`).
-- [x] M1: Create test image fixtures for multimodal testing (`shapes.png`, `shapes.jpg`, `corrupt.png`).
-- [x] M1: Create M1 integration test suite in `tests/integration/ollama-inference.test.ts`.
-- [x] M1: Create M1 verification script in `scripts/verify/verify-m1-inference.ts`.
-- [x] M1: Verify text generation, vision, reasoning, streaming, invalid model handling, and 100% GPU Apple Metal acceleration.
-- [x] M1: Benchmark cold/warm latency and update `docs/benchmarks.md`.
-- [ ] M2: Define domain interfaces (`InferenceClient`, `ApiKeyAuthenticator`, `QuotaRepository`, `AdmissionController`, `ImageProcessor`, `Clock`, `MetricsRecorder`).
-- [ ] M2: Implement domain errors and models.
-- [ ] M2: Implement `BearerTokenAuthenticator` with constant-time comparison (`timingSafeEqualString`).
-- [ ] M2: Implement Fastify route skeleton and `onRequest` authentication hook.
-- [ ] M2: Implement fake infrastructure dependencies (`FakeInferenceClient`, etc.) for tests.
-- [ ] M2: Implement composition root (`createDependencies.ts` and `createApp(dependencies)`).
-- [ ] M2: Write comprehensive unit/integration tests for authentication, DI swapping, and route skeleton.
-- [ ] M2: Verify M2 gate criteria.
+## Current Tasks (M2 Completed, M3 Active)
+- [x] M2: Define domain interfaces (`InferenceClient`, `ApiKeyAuthenticator`, `QuotaRepository`, `AdmissionController`, `ImageProcessor`, `Clock`, `MetricsRecorder`).
+- [x] M2: Implement domain models and structured error hierarchy (`DomainError`, `UnauthorizedError`, `InvalidRequestError`, etc.).
+- [x] M2: Implement `BearerTokenAuthenticator` using timing-safe fixed-length SHA-256 comparison (`timingSafeEqualString`).
+- [x] M2: Implement Fastify application factory (`createApp`) with `onRequest` authentication hook, route skeleton, and log redaction.
+- [x] M2: Implement fake infrastructure dependencies in `tests/fakes/` for testing DI without external dependencies.
+- [x] M2: Implement composition root (`createDependencies`) supporting clean dependency injection and overrides.
+- [x] M2: Write comprehensive tests in `tests/unit/authenticator.test.ts` and `tests/integration/api-skeleton.test.ts` (24 new tests, 39 total).
+- [ ] M3: Implement Sharp image validation and normalization in `gateway/src/infrastructure/images/SharpImageProcessor.ts`.
+- [ ] M3: Enforce image security bounds ($\le 2$ images, $\le 20$ MP, $\le 4$ MB decoded, valid JPEG/PNG/WebP magic bytes, decompression bomb protection).
+- [ ] M3: Implement real `OllamaInferenceClient` in `gateway/src/infrastructure/ollama/OllamaInferenceClient.ts`.
+- [ ] M3: Map OpenAI-compatible messages to Ollama native formats with base64 images.
+- [ ] M3: Integrate real Ollama client into the gateway composition root.
+- [ ] M3: Write comprehensive M3 unit and integration tests (failing tests first).
+- [ ] M3: Verify M3 gate criteria.
 
 ## Completed Work
 - **M0**: Environment audit, tooling, repository foundation, baseline tests committed (`42cc6b4`).
-- **M1**:
-  - Downloaded `qwen3.8:27b` (ID: `47951e4a6661`, 18 GB, Q4/nvfp4, 27.8B parameters).
-  - Validated 100% GPU execution via Apple MLX runner with 20.09 GB allocated in VRAM.
-  - Verified cold start latency (18,665 ms), warm start latency (5,175 ms), TTFT (1,816 ms).
-  - Verified complex reasoning: correctly solved bat-and-ball problem (`$0.05`).
-  - Verified vision analysis: correctly described shapes, colors, relative positions, and text from `shapes.png`.
-  - Verified SSE streaming with progressive token delivery.
-  - Verified invalid model request mapping (HTTP 404).
-  - All 15 unit and integration tests passing in Vitest.
+- **M1**: Model `qwen3.8:27b` downloaded; 100% Metal GPU acceleration verified; text, reasoning, image, and streaming integration tests passed (`d01e1d9`).
+- **M2**:
+  - Implemented domain contracts in `gateway/src/domain/interfaces/index.ts`.
+  - Implemented domain models and errors in `gateway/src/domain/models/types.ts` and `gateway/src/domain/errors/index.ts`.
+  - Implemented `BearerTokenAuthenticator` with support for primary and secondary rotated secrets and constant-time equality check.
+  - Implemented `QuotaService` and `InferenceService` with resource lease tracking in `finally` blocks.
+  - Implemented `ChatCompletionController` and Fastify application factory `createApp(dependencies)`.
+  - Configured logger redaction to prevent secret exposure.
+  - Implemented comprehensive fake dependencies in `tests/fakes/`.
+  - Authored ADR 0002 (`docs/decisions/0002-composition-and-authentication.md`).
+  - Added 24 new unit and integration tests across 2 test files; all 39 tests passing cleanly.
 
 ## Architecture Decisions
 - ADR-0001: Technology Stack and Development Environment Isolation.
 - ADR-0002: Service Coexistence and Ollama Instance Management.
-- ADR-0003: Ollama MLX Runner & Metal Acceleration — Verified that Ollama utilizes Apple MLX framework on M1 Max for `qwen3.8:27b`, allocating 100% of layers directly into GPU VRAM.
+- ADR-0003: Ollama MLX Runner & Metal Acceleration.
+- ADR-0004: Composition Root, Dependency Inversion, and Early Authentication Hook — Authentication strictly runs in `onRequest` before request body parsing, using timing-safe comparison with stable internal key IDs for rotation.
 
 ## Files Changed
-- `docs/api-contract.md`
-- `docs/benchmarks.md`
-- `scripts/setup/create-fixtures.ts`
-- `scripts/verify/verify-m1-inference.ts`
-- `tests/fixtures/images/corrupt.png`
-- `tests/fixtures/images/shapes.jpg`
-- `tests/fixtures/images/shapes.png`
-- `tests/integration/ollama-inference.test.ts`
+- `docs/decisions/0002-composition-and-authentication.md`
+- `gateway/src/app.ts`
+- `gateway/src/application/InferenceService.ts`
+- `gateway/src/application/QuotaService.ts`
+- `gateway/src/composition/createDependencies.ts`
+- `gateway/src/config/AppConfig.ts`
+- `gateway/src/domain/errors/index.ts`
+- `gateway/src/domain/interfaces/index.ts`
+- `gateway/src/domain/models/types.ts`
+- `gateway/src/http/controllers/ChatCompletionController.ts`
+- `gateway/src/http/schemas/chatCompletion.ts`
+- `gateway/src/infrastructure/auth/BearerTokenAuthenticator.ts`
+- `gateway/src/infrastructure/observability/StructuredMetricsRecorder.ts`
+- `gateway/src/infrastructure/observability/SystemClock.ts`
+- `gateway/src/main.ts`
+- `tests/fakes/index.ts`
+- `tests/integration/api-skeleton.test.ts`
+- `tests/unit/authenticator.test.ts`
 - `working.md`
 
 ## Tests Written
+- `tests/unit/authenticator.test.ts` (9 tests)
+- `tests/integration/api-skeleton.test.ts` (15 tests)
 - `tests/unit/foundation.test.ts` (9 tests)
-- `tests/integration/ollama-inference.test.ts` (6 tests):
-  - `generates coherent text response`
-  - `correctly answers a known-answer reasoning problem`
-  - `describes visual elements from an uploaded image`
-  - `streams output chunks progressively using SSE`
-  - `fails safely when requesting an unsupported/non-existent model`
-  - `verifies model is accelerated with GPU/Metal`
+- `tests/integration/ollama-inference.test.ts` (6 tests)
+- Total: 39 tests
 
 ## Tests Executed
-- Command: `pnpm tsx scripts/verify/verify-m1-inference.ts` (PASS - All 7 checks verified)
-- Command: `pnpm test` (PASS - 15/15 tests across 2 files in 20.63s)
 - Command: `pnpm typecheck` (PASS - 0 errors)
 - Command: `pnpm lint` (PASS - 0 errors)
+- Command: `pnpm test` (PASS - 39/39 tests across 4 test files)
 
 ## Current Blockers
 - None.
@@ -88,11 +96,11 @@ M1_COMPLETED
 - None.
 
 ## Important Context
-- Ollama is running `qwen3.8:27b` using MLX runner on 100% GPU with 20.09 GB VRAM.
-- In M2, we build the application skeleton and authentication using injected fake dependencies; real Ollama is not required for M2 tests.
+- M2 passes completely with isolated fake dependencies.
+- Next step M3 connects real `OllamaInferenceClient` and `SharpImageProcessor`.
 
 ## Next Exact Action
-- Implement M2: Define domain interfaces and models in `gateway/src/domain/`, implement `BearerTokenAuthenticator`, implement Fastify app with DI in `gateway/src/app.ts`, and write failing tests first (TDD).
+- Implement M3: Develop `SharpImageProcessor`, implement `OllamaInferenceClient`, map OpenAI schemas to Ollama, write failing integration tests for valid/invalid text and image requests.
 
 ## Last Verification
-- Ran full test suite (`pnpm test`), typecheck (`pnpm typecheck`), and lint (`pnpm lint`) — all 15 tests passed.
+- All 39 tests passed in 17.73s across 4 test suites.
