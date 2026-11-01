@@ -1,0 +1,23 @@
+# Cloudflare Tunnel Configuration (cloudflared)
+# File: infra/cloudflare/config.yml
+
+tunnel: <YOUR_TUNNEL_UUID>
+credentials-file: /path/to/.cloudflared/<YOUR_TUNNEL_UUID>.json
+
+ingress:
+  # Route public hostname to local Nginx reverse proxy
+  - hostname: llm.example.com
+    service: http://127.0.0.1:8080
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 5s
+      originServerName: localhost
+      access:
+        required: true
+        teamName: <YOUR_CLOUDFLARE_TEAM_DOMAIN>
+        aud:
+          - <YOUR_ACCESS_APPLICATION_AUD_TAG>
+
+  # Catch-all: reject any unrecognized hostnames with 404
+  - service: http_status:404
+

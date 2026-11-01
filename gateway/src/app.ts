@@ -3,6 +3,7 @@ import type { AppConfig } from "./config/AppConfig.js";
 import type {
   InferenceClient,
   ApiKeyAuthenticator,
+  AccessValidator,
   QuotaRepository,
   AdmissionController,
   ImageProcessor,
@@ -17,6 +18,7 @@ import { DomainError, UnauthorizedError, PayloadTooLargeError } from "./domain/e
 export interface AppDependencies {
   config: AppConfig;
   authenticator: ApiKeyAuthenticator;
+  accessValidator?: AccessValidator | undefined;
   inferenceClient: InferenceClient;
   quotaRepository: QuotaRepository;
   admissionController: AdmissionController;
@@ -98,6 +100,15 @@ export function createApp(deps: AppDependencies): FastifyInstance {
       return;
     }
 
+    // Step 1: Cloudflare Access Edge Validation (if configured)
+    if (deps.accessValidator) {
+      const accessResult = deps.accessValidator.validate(request.headers);
+      if (!accessResult.valid) {
+        throw new UnauthorizedError(accessResult.reason || "Cloudflare Access authentication failed");
+      }
+    }
+
+    // Step 2: Gateway Bearer API Secret Validation
     const authHeader = request.headers.authorization;
     const authResult = deps.authenticator.authenticate(authHeader);
 

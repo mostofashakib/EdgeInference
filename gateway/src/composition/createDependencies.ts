@@ -1,5 +1,6 @@
 import type { AppConfig } from "../config/AppConfig.js";
 import { BearerTokenAuthenticator } from "../infrastructure/auth/BearerTokenAuthenticator.js";
+import { CloudflareAccessValidator } from "../infrastructure/auth/CloudflareAccessValidator.js";
 import { SystemClock } from "../infrastructure/observability/SystemClock.js";
 import { StructuredMetricsRecorder } from "../infrastructure/observability/StructuredMetricsRecorder.js";
 import { SharpImageProcessor } from "../infrastructure/images/SharpImageProcessor.js";
@@ -9,6 +10,7 @@ import { SemaphoreAdmissionController } from "../infrastructure/concurrency/Sema
 import type {
   InferenceClient,
   ApiKeyAuthenticator,
+  AccessValidator,
   QuotaRepository,
   AdmissionController,
   ImageProcessor,
@@ -19,6 +21,7 @@ import type { AppDependencies } from "../app.js";
 
 export interface DependencyOverrides {
   authenticator?: ApiKeyAuthenticator | undefined;
+  accessValidator?: AccessValidator | undefined;
   inferenceClient?: InferenceClient | undefined;
   quotaRepository?: QuotaRepository | undefined;
   admissionController?: AdmissionController | undefined;
@@ -42,6 +45,22 @@ export function createDependencies(
   }
 
   const authenticator = overrides.authenticator ?? new BearerTokenAuthenticator(keys);
+
+  let accessValidator: AccessValidator | undefined = overrides.accessValidator;
+  if (!accessValidator && config.cfAccessEnabled) {
+    const tokens = [];
+    if (config.cfAccessClientId && config.cfAccessClientSecret) {
+      tokens.push({
+        clientId: config.cfAccessClientId,
+        clientSecret: config.cfAccessClientSecret
+      });
+    }
+    accessValidator = new CloudflareAccessValidator({
+      enabled: true,
+      serviceTokens: tokens
+    });
+  }
+
   const clock = overrides.clock ?? new SystemClock();
   const metricsRecorder = overrides.metricsRecorder ?? new StructuredMetricsRecorder();
   const imageProcessor = overrides.imageProcessor ?? new SharpImageProcessor({
@@ -59,6 +78,7 @@ export function createDependencies(
   return {
     config,
     authenticator,
+    accessValidator,
     inferenceClient,
     quotaRepository,
     admissionController,

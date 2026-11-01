@@ -9,6 +9,11 @@ export const AppConfigSchema = z.object({
   primaryApiKey: z.string().min(1, "LLM_API_SECRET is required"),
   secondaryApiKey: z.string().optional(),
 
+  // Cloudflare Access Service Token Configuration
+  cfAccessEnabled: z.coerce.boolean().default(false),
+  cfAccessClientId: z.string().optional(),
+  cfAccessClientSecret: z.string().optional(),
+
   ollamaBaseUrl: z.string().url().default("http://127.0.0.1:11434"),
   allowedModels: z.array(z.string()).default(["qwen3.8:27b"]),
 
@@ -47,6 +52,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     host: env.HOST,
     primaryApiKey: env.LLM_API_SECRET,
     secondaryApiKey: env.LLM_API_SECRET_PREVIOUS,
+    cfAccessEnabled: env.CF_ACCESS_ENABLED,
+    cfAccessClientId: env.CF_ACCESS_CLIENT_ID,
+    cfAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET,
     ollamaBaseUrl: env.OLLAMA_BASE_URL,
     allowedModels: env.ALLOWED_MODELS ? env.ALLOWED_MODELS.split(",").map((s) => s.trim()) : undefined,
     maxActiveInference: env.MAX_ACTIVE_INFERENCE,

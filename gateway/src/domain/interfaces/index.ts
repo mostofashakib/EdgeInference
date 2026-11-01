@@ -19,6 +19,10 @@ export interface ApiKeyAuthenticator {
   authenticate(authorizationHeader?: string): AuthenticationResult;
 }
 
+export interface AccessValidator {
+  validate(headers: Record<string, string | string[] | undefined>): { valid: boolean; reason?: string | undefined };
+}
+
 export interface QuotaRepository {
   reserve(keyId: string, period: string, limit: number): Promise<QuotaReservation>;
   rollback(keyId: string, period: string): Promise<void>;
