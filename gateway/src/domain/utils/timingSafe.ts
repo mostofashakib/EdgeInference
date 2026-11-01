@@ -13,3 +13,4 @@ export function timingSafeEqualString(a: string, b: string): boolean {
   const hashB = crypto.createHash("sha256").update(b).digest();
   return crypto.timingSafeEqual(hashA, hashB);
 }
+

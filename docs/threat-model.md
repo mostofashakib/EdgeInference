@@ -57,3 +57,4 @@ Ollama Backend (Port 11434)
 
 1. **Host Compromise**: If an attacker gains local user execution on the macOS host, they can access loopback listeners directly. Host security (macOS FileVault, user permissions) is an external dependency.
 2. **MacBook Sleep State**: If the host sleeps during an inference request, active network connections terminate. Handled by client retry policies and graceful tunnel reconnection on wake.
+

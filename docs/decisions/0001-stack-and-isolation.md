@@ -38,3 +38,4 @@ Key constraints:
 - Testing can execute completely offline and in-memory using lightweight fakes for Ollama, SQLite, and network components.
 - Native modules (`better-sqlite3`, `sharp`) must compile cleanly on Apple Silicon (arm64) and link against Node 24.
 - Running dual Ollama daemons (Desktop app vs Homebrew service) must be avoided to prevent port collisions on 11434.
+

@@ -121,3 +121,4 @@ Domain and Application layers depend exclusively on interfaces. No business logi
 8. **Inference Execution**: `OllamaInferenceClient` dispatches to `127.0.0.1:11434` with an `AbortSignal`.
 9. **Streaming / Delivery**: Tokens are written as Server-Sent Events (SSE) or aggregated for non-streaming.
 10. **Resource Cleanup**: When inference completes, errors out, or client disconnects, `InferenceLease` is released immediately in a `finally` block.
+
