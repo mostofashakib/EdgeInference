@@ -19,5 +19,11 @@ export class QuotaService {
     }
     return reservation;
   }
+
+  async rollback(keyId: string): Promise<void> {
+    const now = this.clock.now();
+    const period = now.toISOString().slice(0, 10);
+    await this.repository.rollback(keyId, period);
+  }
 }
 

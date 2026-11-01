@@ -21,6 +21,7 @@ export interface ApiKeyAuthenticator {
 
 export interface QuotaRepository {
   reserve(keyId: string, period: string, limit: number): Promise<QuotaReservation>;
+  rollback(keyId: string, period: string): Promise<void>;
 }
 
 export interface AdmissionController {

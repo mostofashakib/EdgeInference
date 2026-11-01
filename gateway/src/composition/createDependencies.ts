@@ -4,6 +4,8 @@ import { SystemClock } from "../infrastructure/observability/SystemClock.js";
 import { StructuredMetricsRecorder } from "../infrastructure/observability/StructuredMetricsRecorder.js";
 import { SharpImageProcessor } from "../infrastructure/images/SharpImageProcessor.js";
 import { OllamaInferenceClient } from "../infrastructure/ollama/OllamaInferenceClient.js";
+import { SqliteQuotaRepository } from "../infrastructure/persistence/SqliteQuotaRepository.js";
+import { SemaphoreAdmissionController } from "../infrastructure/concurrency/SemaphoreAdmissionController.js";
 import type {
   InferenceClient,
   ApiKeyAuthenticator,
@@ -48,19 +50,18 @@ export function createDependencies(
     allowedFormats: ["jpeg", "png", "webp"]
   });
   const inferenceClient = overrides.inferenceClient ?? new OllamaInferenceClient(config.ollamaBaseUrl);
-
-  if (!overrides.quotaRepository || !overrides.admissionController) {
-    throw new Error(
-      "Quota repository and admission controller must be supplied (M4 infrastructure)."
-    );
-  }
+  const quotaRepository = overrides.quotaRepository ?? new SqliteQuotaRepository(config.databasePath);
+  const admissionController = overrides.admissionController ?? new SemaphoreAdmissionController({
+    maxActive: config.maxActiveInference,
+    maxQueue: config.maxQueueCapacity
+  });
 
   return {
     config,
     authenticator,
     inferenceClient,
-    quotaRepository: overrides.quotaRepository,
-    admissionController: overrides.admissionController,
+    quotaRepository,
+    admissionController,
     imageProcessor,
     clock,
     metricsRecorder

@@ -96,6 +96,10 @@ export class FakeQuotaRepository implements QuotaRepository {
       resetAt: new Date(Date.now() + 86400000)
     };
   }
+
+  async rollback(_keyId: string, _period: string): Promise<void> {
+    this.remainingQuota++;
+  }
 }
 
 export class FakeAdmissionController implements AdmissionController {

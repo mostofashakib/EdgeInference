@@ -147,8 +147,14 @@ export class InferenceService {
     // 3. Atomic daily quota check
     await this.quotaService.checkAndReserve(keyId);
 
-    // 4. Concurrency lease acquisition
-    const lease: InferenceLease = await this.admissionController.acquire(signal);
+    // 4. Concurrency lease acquisition (rollback quota if rejected or aborted while queued)
+    let lease: InferenceLease;
+    try {
+      lease = await this.admissionController.acquire(signal);
+    } catch (err) {
+      await this.quotaService.rollback(keyId);
+      throw err;
+    }
 
     try {
       // 5. Invoke inference client
@@ -210,8 +216,14 @@ export class InferenceService {
     // 3. Atomic daily quota check
     await this.quotaService.checkAndReserve(keyId);
 
-    // 4. Concurrency lease acquisition
-    const lease: InferenceLease = await this.admissionController.acquire(signal);
+    // 4. Concurrency lease acquisition (rollback quota if rejected or aborted while queued)
+    let lease: InferenceLease;
+    try {
+      lease = await this.admissionController.acquire(signal);
+    } catch (err) {
+      await this.quotaService.rollback(keyId);
+      throw err;
+    }
     let ttftMs: number | undefined;
 
     try {
