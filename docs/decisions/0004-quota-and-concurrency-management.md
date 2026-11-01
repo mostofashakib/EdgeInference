@@ -33,3 +33,4 @@ Constraints:
 - Guaranteed preservation of workstation stability: maximum 1 model inference execution at any time.
 - Strict fairness: rejected or aborted requests do not burn daily request budgets.
 - Zero database locking overhead during active model token generation.
+

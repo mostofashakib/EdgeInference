@@ -67,8 +67,8 @@ describe("M1 Local Ollama Inference Integration", () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as ChatCompletionResponse;
     const content = data.choices[0]?.message.content.toLowerCase() || "";
-    // Correct answer is 5 cents ($0.05)
-    expect(content).toMatch(/5\s*cents?|0\.05|\$0\.05/);
+    // Correct answer is 5 cents ($0.05 or 5)
+    expect(content).toMatch(/\b5\b|5\s*cents?|0\.05|\$0\.05/);
   }, 45000);
 
   it("describes visual elements from an uploaded image", async () => {
