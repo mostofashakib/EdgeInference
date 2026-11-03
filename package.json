@@ -16,8 +16,8 @@
     "verify:env": "tsx scripts/verify/audit-environment.ts"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "mostofashakib (https://github.com/mostofashakib)",
+  "license": "MIT",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",

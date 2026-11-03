@@ -696,3 +696,11 @@ pnpm audit --prod
 ## 9. Infrastructure & Setup References
 
 - [Cloudflare Tunnel & Access Setup](infra/cloudflare/README.md)
+
+---
+
+## 10. License & Author
+
+This project is licensed under the [MIT License](LICENSE).
+
+Developed by [mostofashakib](https://github.com/mostofashakib).
