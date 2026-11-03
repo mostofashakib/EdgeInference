@@ -6,8 +6,11 @@ export const AppConfigSchema = z.object({
   host: z.string().default("127.0.0.1"),
 
   // Primary API secret and optional secondary secret for rotation
-  primaryApiKey: z.string().min(1, "LLM_API_SECRET is required"),
-  secondaryApiKey: z.string().optional(),
+  primaryApiKey: z.string({ error: "LLM_API_SECRET is required" })
+    .refine((secret) => secret.trim().length > 0, "LLM_API_SECRET must not be blank"),
+  secondaryApiKey: z.string()
+    .refine((secret) => secret === "" || secret.trim().length > 0, "LLM_API_SECRET_PREVIOUS must not be blank")
+    .optional(),
   guestApiKeys: z.array(z.string()).default([]),
   guestDailyQuota: z.coerce.number().int().positive().default(10),
   guestRateLimitPerMinute: z.coerce.number().int().positive().default(3),

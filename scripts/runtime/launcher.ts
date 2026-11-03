@@ -64,7 +64,11 @@ export function createServiceCommands(
   if (tunnel) {
     if (!executables.cloudflared) throw new Error("Cloudflare tunnel requires a detected cloudflared executable");
     const token = env.CLOUDFLARE_TUNNEL_TOKEN || env.CF_TUNNEL_TOKEN;
-    commands.push({ name: "cloudflared", command: executables.cloudflared, args: token
+    // cloudflared logs unrecognized CF_* variables, including our token alias.
+    const privateVariables = ["CF_TUNNEL_TOKEN", "CLOUDFLARE_TUNNEL_TOKEN", "CF_ACCESS_CLIENT_SECRET",
+      "LLM_API_SECRET", "LLM_API_SECRET_PREVIOUS", "LLM_GUEST_API_KEYS"];
+    const tunnelEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !privateVariables.includes(name.toUpperCase())));
+    commands.push({ name: "cloudflared", command: executables.cloudflared, env: tunnelEnv, args: token
       ? ["tunnel", "run", "--token", token]
       : ["tunnel", "--url", "http://127.0.0.1:8080"] });
   }

@@ -49,3 +49,12 @@ it("uses the detected executable path instead of assuming PATH is configured", (
   const commands = createServiceCommands(config, "/project", false, {}, { nginx: "/installed/nginx" });
   expect(commands[1]?.command).toBe("/installed/nginx");
 });
+
+
+it("keeps tunnel tokens out of cloudflared's inherited environment", () => {
+  const env = { PATH: "/bin", CF_TUNNEL_TOKEN: "configured-token", CLOUDFLARE_TUNNEL_TOKEN: "other-token", CF_ACCESS_CLIENT_SECRET: "access-secret", LLM_API_SECRET: "app-secret", LLM_API_SECRET_PREVIOUS: "old-secret", LLM_GUEST_API_KEYS: "guest-secret" };
+  const tunnel = createServiceCommands(config, "/project", true, env, tools).at(-1);
+  expect(tunnel?.env).toEqual({ PATH: "/bin" });
+  expect(tunnel?.args).toEqual(["tunnel", "run", "--token", "other-token"]);
+  expect(env.CF_TUNNEL_TOKEN).toBe("configured-token");
+});
