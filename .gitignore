@@ -54,3 +54,6 @@ docs/
 cert.pem
 *.tunnel-token
 
+
+# Generated portable runner configuration
+/data/runtime-nginx.conf

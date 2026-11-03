@@ -23,7 +23,7 @@ if (typeof process.loadEnvFile === "function" && fs.existsSync(".env")) {
 const ENDPOINT_URL = process.env.ENDPOINT_URL || "http://127.0.0.1:8080";
 const OWNER_API_KEY = process.env.LLM_API_SECRET || "";
 const GUEST_API_KEY = (process.env.LLM_GUEST_API_KEYS || "").split(",")[0]?.trim() || "guest_demo_token_12345";
-const MODEL = "qwen3.8:27b";
+const MODEL = process.env.LLM_MODEL || "qwen3.8:27b";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -76,7 +76,7 @@ async function runFlow1Chat(): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OWNER_API_KEY}`
+      "Authorization": createHashedBearerHeader(OWNER_API_KEY).Authorization
     },
     body: JSON.stringify({
       model: MODEL,
@@ -126,7 +126,7 @@ async function runFlow2Vision(): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OWNER_API_KEY}`
+      "Authorization": createHashedBearerHeader(OWNER_API_KEY).Authorization
     },
     body: JSON.stringify({
       model: MODEL,
@@ -170,7 +170,7 @@ async function runFlow3Reasoning(): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OWNER_API_KEY}`
+      "Authorization": createHashedBearerHeader(OWNER_API_KEY).Authorization
     },
     body: JSON.stringify({
       model: MODEL,
@@ -209,11 +209,11 @@ async function runFlow4Streaming(): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OWNER_API_KEY}`
+      "Authorization": createHashedBearerHeader(OWNER_API_KEY).Authorization
     },
     body: JSON.stringify({
       model: MODEL,
-      messages: [{ role: "user", content: "Write a haiku about local inference on Apple Silicon." }],
+      messages: [{ role: "user", content: "Write a haiku about local inference." }],
       stream: true
     })
   });
@@ -276,7 +276,7 @@ async function runFlow5DDoSDefense(): Promise<void> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${GUEST_API_KEY}`,
+        "Authorization": createHashedBearerHeader(GUEST_API_KEY).Authorization,
         "X-Client-Role": "guest"
       },
       body: JSON.stringify({
@@ -309,7 +309,7 @@ async function runFlow6OwnerImmunity(): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OWNER_API_KEY}`
+      "Authorization": createHashedBearerHeader(OWNER_API_KEY).Authorization
     },
     body: JSON.stringify({
       model: MODEL,

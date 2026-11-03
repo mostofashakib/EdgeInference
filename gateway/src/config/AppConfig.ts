@@ -21,7 +21,7 @@ export const AppConfigSchema = z.object({
   cfAccessClientSecret: z.string().optional(),
 
   ollamaBaseUrl: z.string().url().default("http://127.0.0.1:11434"),
-  allowedModels: z.array(z.string()).default(["qwen3.8:27b"]),
+  allowedModels: z.array(z.string().trim().min(1)).min(1).default(["qwen3.8:27b"]),
 
   maxActiveInference: z.coerce.number().int().positive().default(1),
   maxQueueCapacity: z.coerce.number().int().nonnegative().default(2),
@@ -65,7 +65,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     cfAccessClientId: env.CF_ACCESS_CLIENT_ID,
     cfAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET,
     ollamaBaseUrl: env.OLLAMA_BASE_URL,
-    allowedModels: env.ALLOWED_MODELS ? env.ALLOWED_MODELS.split(",").map((s) => s.trim()) : undefined,
+    allowedModels: env.ALLOWED_MODELS !== undefined ? env.ALLOWED_MODELS.split(",").map((s) => s.trim()) : env.LLM_MODEL ? [env.LLM_MODEL] : undefined,
     maxActiveInference: env.MAX_ACTIVE_INFERENCE,
     maxQueueCapacity: env.MAX_QUEUE_CAPACITY,
     dailyRequestQuota: env.DAILY_REQUEST_QUOTA,

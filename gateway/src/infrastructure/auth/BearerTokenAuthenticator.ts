@@ -33,6 +33,28 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
 
   authenticate(authorizationHeader?: string, context?: RequestAuthContext): AuthenticationResult {
     const headers = context?.headers;
+    const credentialHeaderNames = ["authorization", "x-hashed-token", "x-signature", "x-signature-256"];
+    const credentialValues = [
+      authorizationHeader,
+      ...Object.entries(headers ?? {})
+        .filter(([name]) => credentialHeaderNames.includes(name.toLowerCase()))
+        .flatMap(([, value]) => value ?? [])
+    ];
+    const submittedCredentials = credentialValues.flatMap((value) =>
+      value ? [value, value.trim(), ...value.split(/[,\s]+/)] : []
+    );
+    for (const credential of submittedCredentials) {
+      const rawMatch = credential && this.keys.some((key) => {
+        if (timingSafeEqualString(credential, key.secret)) return true;
+        const tokenStart = credential.length - key.secret.length;
+        return tokenStart > 0
+          && /^\s*(?:Bearer|Hashed|HMAC-SHA256)\s+$/i.test(credential.slice(0, tokenStart))
+          && timingSafeEqualString(credential.slice(tokenStart), key.secret);
+      });
+      if (rawMatch) {
+        return { authenticated: false, reason: "Raw API secrets are not accepted. Use HMAC-SHA256 or a SHA-256 digest." };
+      }
+    }
 
     // -------------------------------------------------------------------------
     // Path 1: Dynamic HMAC-SHA256 Request Signature Verification
@@ -135,7 +157,6 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
     // -------------------------------------------------------------------------
     // Path 3: Authorization Header Verification (Bearer or Hashed)
     // Supports:
-    //   - Authorization: Bearer <raw_secret>
     //   - Authorization: Bearer <sha256_hash_of_secret>
     //   - Authorization: Hashed <sha256_hash_of_secret>
     // -------------------------------------------------------------------------
@@ -149,7 +170,7 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
     if (parts.length !== 2 || (parts[0] !== "Bearer" && parts[0] !== "Hashed")) {
       return {
         authenticated: false,
-        reason: "Malformed Authorization header; expected 'Bearer <token>', 'Hashed <sha256>', or HMAC headers"
+        reason: "Malformed Authorization header; expected 'Bearer <sha256>', 'Hashed <sha256>', or HMAC headers"
       };
     }
 
@@ -158,13 +179,12 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
       return { authenticated: false, reason: "Empty bearer token" };
     }
 
-    // Check all keys against raw secret AND against SHA-256 pre-hash of secret in constant time
+    // Compare only SHA-256 digests. Raw API secrets are rejected above.
     for (const key of this.keys) {
-      const isRawMatch = timingSafeEqualString(submittedToken, key.secret);
       const expectedHash = crypto.createHash("sha256").update(key.secret).digest("hex");
       const isHashMatch = timingSafeEqualString(submittedToken, expectedHash);
 
-      if (isRawMatch || isHashMatch) {
+      if (isHashMatch) {
         const role = key.role ?? (key.keyId.startsWith("owner") || key.keyId.includes("primary") ? "owner" : "guest");
         return {
           authenticated: true,
@@ -174,6 +194,6 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
       }
     }
 
-    return { authenticated: false, reason: "Invalid API secret or hash" };
+    return { authenticated: false, reason: "Invalid SHA-256 token" };
   }
 }

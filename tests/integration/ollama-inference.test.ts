@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const MODEL_NAME = "qwen3.8:27b";
+const MODEL_NAME = process.env.LLM_MODEL || "qwen3.8:27b";
 
 interface ChatCompletionResponse {
   id: string;
@@ -16,7 +16,7 @@ interface ChatCompletionResponse {
   }>;
 }
 
-describe("M1 Local Ollama Inference Integration", () => {
+describe("Portable Ollama Inference Integration", () => {
   beforeAll(async () => {
     // Verify Ollama is reachable
     const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
@@ -166,7 +166,7 @@ describe("M1 Local Ollama Inference Integration", () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
   }, 10000);
 
-  it("verifies model is accelerated with GPU/Metal", async () => {
+  it("reports valid memory allocation for CPU, mixed, or GPU inference", async () => {
     const res = await fetch(`${OLLAMA_BASE_URL}/api/ps`);
     expect(res.ok).toBe(true);
     const data = (await res.json()) as {
@@ -180,9 +180,9 @@ describe("M1 Local Ollama Inference Integration", () => {
 
     const activeModel = data.models?.find((m) => m.name.includes(MODEL_NAME));
     expect(activeModel).toBeDefined();
-    // In Ollama on Apple Silicon, size_vram holds the VRAM allocated on GPU
-    expect(activeModel!.size_vram).toBeGreaterThan(0);
-    expect(activeModel!.size_vram).toBe(activeModel!.size);
+    expect(activeModel!.size).toBeGreaterThan(0);
+    expect(activeModel!.size_vram ?? 0).toBeGreaterThanOrEqual(0);
+    expect(activeModel!.size_vram ?? 0).toBeLessThanOrEqual(activeModel!.size);
   }, 15000);
 });
 

@@ -1,8 +1,8 @@
 # EdgeInference
 
-> **Secure, Self-Hosted Multimodal LLM Inference Service on Apple Silicon**
+> Secure, self-hosted LLM inference on macOS, Linux, and Windows
 
-EdgeInference provides an OpenAI-compatible API gateway running `qwen3.8:27b` on Apple Silicon (M1 Max, 64GB unified memory) with 100% Metal GPU acceleration. It incorporates edge authorization, reverse-proxy rate limiting, atomic SQLite daily quotas, in-process concurrency management, Sharp-based multimodal image sanitization, and unbuffered SSE streaming.
+EdgeInference provides an OpenAI-compatible API gateway for models served by Ollama on macOS, Linux, and Windows. Choose a model that fits your inference host. CPU, supported GPU, and mixed CPU/GPU execution are supported. It incorporates edge authorization, reverse-proxy rate limiting, atomic SQLite daily quotas, in-process concurrency management, Sharp-based multimodal image sanitization, and unbuffered SSE streaming.
 
 > 🤖 **AI Coding Agent Integration:** If you are building code or instructing an AI agent to consume this inference service, see [LLM.md](LLM.md) for concise schemas, copy-paste TypeScript/Python snippets, HMAC-SHA256 request signing, and retry strategies.
 
@@ -28,7 +28,7 @@ EdgeInference provides an OpenAI-compatible API gateway running `qwen3.8:27b` on
                                       │ HTTP (127.0.0.1:8080)
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          MacBook Pro (Apple Silicon)                        │
+│                          Inference Host (macOS / Linux / Windows)                        │
 │                                                                             │
 │  +─────────────────────────+                                                │
 │  │   Nginx Reverse Proxy   │  127.0.0.1:8080                                │
@@ -42,7 +42,7 @@ EdgeInference provides an OpenAI-compatible API gateway running `qwen3.8:27b` on
 │               ▼                                                             │
 │  +─────────────────────────+                                                │
 │  │     Fastify Gateway     │  127.0.0.1:8765                                │
-│  │   - Dual-Gate Auth      │  (CF-Access-* + Bearer API secret in onRequest)│
+│  │   - Dual-Gate Auth      │  (CF-Access-* + HMAC / SHA-256 auth in onRequest)│
 │  │   - Strict Zod schema   │  (Unsupported parameter rejection)             │
 │  │   - Sharp sanitizer     │  (Magic bytes, 20 MP limit, metadata stripped) │
 │  │   - SQLite WAL quota    │  (Atomic 100 req/day per key with rollback)    │
@@ -54,7 +54,7 @@ EdgeInference provides an OpenAI-compatible API gateway running `qwen3.8:27b` on
 │  +─────────────────────────+                                                │
 │  │      Ollama Engine      │  127.0.0.1:11434                               │
 │  │   - Model: qwen3.8:27b  │  (27.8B parameters, nvfp4 quantized)           │
-│  │   - Apple MLX Runner    │  (100% Metal GPU offload, ~20.09 GB VRAM)      │
+│  │   - Ollama Backend     │  (CPU, supported GPU, or mixed allocation)      │
 │  +─────────────────────────+                                                │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -62,10 +62,6 @@ EdgeInference provides an OpenAI-compatible API gateway running `qwen3.8:27b` on
 ---
 
 ## 2. Security & Credential Centralization (Zero-PII Policy)
-
-> [!IMPORTANT]
-> **This repository contains ZERO secrets, API keys, personal file paths, or PII.**  
-> It is safe for public GitHub hosting. All credentials, authorization tokens, and target endpoints must reside exclusively in a local `.env` file, which is strictly excluded from version control via `.gitignore`.
 
 ### Centralized `.env` Configuration
 To configure your local service and consuming applications, copy `.env.example` to `.env`:
@@ -90,7 +86,7 @@ HOST=127.0.0.1
 
 # Application Security (Private Gateway Bearer Secret)
 # Cryptographically random 256-bit hex secret (e.g. openssl rand -hex 32)
-# Passed in header: Authorization: Bearer <LLM_API_SECRET>
+# Passed in header: Authorization: Bearer <sha256_hex_of_LLM_API_SECRET>
 LLM_API_SECRET=your-64-character-hex-random-secret-here
 
 # Optional: Secondary API Secret for zero-downtime rotation
@@ -140,7 +136,7 @@ Any service consuming this endpoint (`POST /v1/chat/completions`) interacts with
 ```http
 POST /v1/chat/completions HTTP/1.1
 Host: 127.0.0.1:8080
-Authorization: Bearer <LLM_API_SECRET>
+Authorization: Bearer <sha256_hex_of_LLM_API_SECRET>
 Content-Type: application/json
 Accept: application/json, text/event-stream
 ```
@@ -330,7 +326,7 @@ interface ErrorResponse {
 | HTTP Status | Error Type (`type`) | Error Code (`code`) | Trigger Condition |
 | :--- | :--- | :--- | :--- |
 | `400 Bad Request` | `invalid_request_error` | `invalid_request` | Malformed JSON, extra fields, remote image URLs, corrupt magic bytes, prompt $> 32\text{k}$ chars. |
-| `401 Unauthorized` | `authentication_error` | `unauthorized` | Missing or invalid `Authorization: Bearer` secret, or missing/invalid Cloudflare Access service token. |
+| `401 Unauthorized` | `authentication_error` | `unauthorized` | Missing or invalid HMAC signature or SHA-256 token, or missing/invalid Cloudflare Access service token. |
 | `404 Not Found` | `invalid_request_error` | `model_not_allowed` | Requested model is not in `ALLOWED_MODELS`, or an invalid URL path was requested. |
 | `405 Method Not Allowed`| `invalid_request_error` | `method_not_allowed` | Non-POST HTTP method attempted on `/v1/chat/completions`. |
 | `413 Payload Too Large`| `invalid_request_error` | `payload_too_large` | Request body exceeds 12 MiB, or image exceeds 4 MiB / 20 megapixels. |
@@ -344,7 +340,7 @@ interface ErrorResponse {
 
 ## 4. Multi-Application Integration & Cryptographic Authentication
 
-EdgeInference is built to serve multiple applications simultaneously. To guarantee security and prevent secret exposure across client networks, **raw secrets are never transmitted in plaintext over the wire**. Instead, incoming requests are authenticated using strong cryptographic hashing and signatures.
+Clients authenticate with HMAC-SHA256 signatures or SHA-256 tokens. The gateway rejects raw application API secrets.
 
 ### 4.1 How the Service Knows "It's You" (Owner vs. Guest)
 When multiple applications connect to this gateway:
@@ -359,9 +355,10 @@ The gateway supports two cryptographic patterns that ensure your raw secret **ne
 
 | Method | Headers Required | Replay-Safe? | Best For |
 | :--- | :--- | :---: | :--- |
-| **1. Dynamic HMAC-SHA256** | `X-Signature`, `X-Timestamp` | **Yes (5-min window)** | Production applications, microservices, backend servers |
-| **2. Pre-Hashed SHA-256 Token** | `Authorization: Bearer <sha256>` | Yes | Simple clients, OpenAI SDK drop-in replacement |
-| **3. Plaintext Bearer (Fallback)** | `Authorization: Bearer <secret>` | No | Quick local testing with standard OpenAI SDKs |
+| **1. Dynamic HMAC-SHA256** | `X-Signature`, `X-Timestamp` | Limited (5-min timestamp window) | Production applications, microservices, backend servers |
+| **2. Pre-Hashed SHA-256 Token** | `Authorization: Bearer <sha256>` | No (reusable token) | Simple clients, OpenAI SDK drop-in replacement |
+
+Raw application API secrets are rejected with HTTP 401 in every authentication mode, including mixed-header requests. Only HMAC-SHA256 signatures and SHA-256 digests are accepted. Hash the secret locally before passing it as an OpenAI SDK API key.
 
 ---
 
@@ -514,42 +511,21 @@ Full runnable multi-application integration examples are available in [`examples
 
 ## 5. Quick Start & Running Services
 
-### 5.1 One-Command Runner (`run.sh` & `kill.sh`)
-Start or stop the entire stack with a single command (modeled after Forge):
+### 5.1 Portable runner
 
-```bash
-# Start all local services (clears conflicting ports, verifies Ollama, boots Gateway and Nginx)
-./run.sh
-# (or: pnpm start)
+After completing the prerequisites below, use the same commands in PowerShell, Command Prompt, or a macOS/Linux terminal:
 
-# Start with Global Multi-Device Access (spins up Cloudflare encrypted HTTPS tunnel):
-./run.sh --tunnel
-# (or: pnpm start:tunnel)
-
-# Gracefully stop everything: press Ctrl+C in the running terminal, or run:
-./kill.sh
-# (or: pnpm stop)
-```
-
-The runner displays a clear readiness banner:
 ```text
-  ✔ EdgeInference is running & ready for requests
-
-  🌐 Global Access (All Devices / Internet):
-     Browser Test Link (Click to test)   → https://llm.yourdomain.com/health
-     OpenAI Base URL (For SDKs / Apps)   → https://llm.yourdomain.com/v1
-     Chat Endpoint (POST requests only)  → https://llm.yourdomain.com/v1/chat/completions
-
-  💻 Local Access (This Machine):
-     Browser Test Link (Click to test)   → http://127.0.0.1:8080/health
-     OpenAI Base URL (For SDKs / Apps)   → http://127.0.0.1:8080/v1
-     Chat Endpoint (POST requests only)  → http://127.0.0.1:8080/v1/chat/completions
+pnpm start
+pnpm start:tunnel
+pnpm stop
 ```
 
-> [!NOTE]
-> **Browser Testing vs. Chat Completions:**  
-> If you paste the Chat Endpoint URL (`/v1/chat/completions`) into a browser address bar, it returns `{"error":{"message":"Method Not Allowed...","code":"method_not_allowed"}}` because browsers send HTTP `GET` requests, whereas the inference API strictly requires HTTP `POST` with a JSON payload and API secret.  
-> To test in a browser, click the **Browser Test Link** (`/health` or `/`), which responds immediately with `{"status":"healthy"}` and HTTP `200 OK`.
+Press Ctrl+C in the running terminal to stop the managed services. On macOS and Linux, `./run.sh` and `./kill.sh` provide the same start/stop path. Both scripts locate Node.js 24 or newer through `PATH`, architecture-specific Homebrew locations, system directories, and an active NVM installation. They work from another directory and forward command arguments. Use `./run.sh --help` or `./kill.sh --help` for usage. `./kill.sh` waits for managed processes to exit and succeeds when the runner is already stopped. The runner detects your OS, CPU architecture, processor, and memory. It searches `PATH`, then standard install directories for that OS and architecture. Apple Silicon and Intel Homebrew paths, Linux system service paths, and Windows native executables use separate lookup rules. For custom installations, set `NGINX_BIN`, `OLLAMA_BIN`, or `CLOUDFLARED_BIN` in `.env`.
+
+The runner reuses your running Ollama backend. If a loopback HTTP backend refuses the connection, it starts local Ollama on the configured address and port, then checks your models before starting the gateway and Nginx. It never starts a local replacement for a remote backend. Ollama detects compatible accelerators and selects CPU, GPU, or mixed execution. Startup checks Ollama’s actual allocation and identifies CPU-only, GPU, or mixed execution. A GPU is optional. CPU-only models with zero GPU allocation pass readiness when they fit in available system memory. If an older backend omits allocation details, startup reports the allocation as unavailable rather than assuming CPU or GPU execution. Your existing GPU-selection environment variables stay in effect. The optional Cloudflare tunnel starts last. Shutdown stops processes owned by the runner and leaves a separately managed Ollama server running. Port conflicts fail startup instead of terminating other applications.
+
+The OpenAI base URL is `http://127.0.0.1:8080/v1`. Check `http://127.0.0.1:8080/health` in your browser. Inference uses `POST /v1/chat/completions` with your API secret.
 
 ### 5.2 Custom Domain Setup: `llm.yourdomain.com` (Zero Impact on Main Website)
 
@@ -577,17 +553,30 @@ You can assign a dedicated subdomain like `llm.yourdomain.com` to this inference
    ```
    Now all your devices, apps, and coding agents worldwide can reach your inference machine at `https://llm.yourdomain.com/v1`!
 
-### 5.3 Prerequisites
-- Apple Silicon Mac with $\ge 32\text{ GB}$ unified memory (64 GB recommended).
-- Ollama installed and running with `qwen3.8:27b`:
-  ```bash
-  ollama pull qwen3.8:27b
-  ```
-- Node.js 24 LTS and Nginx installed via Homebrew:
-  ```bash
-  brew install node@24 nginx cloudflared
-  export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
-  ```
+### 5.3 Prerequisites and model requirements
+
+- Install Node.js 24 or newer and the pnpm version listed in `package.json`.
+- Install [Ollama](https://ollama.com/download) on your inference host. Hardware and drivers must meet [Ollama's platform requirements](https://docs.ollama.com/gpu).
+- Install Nginx and add its executable to `PATH`. On Windows, extract the [Nginx Windows distribution](https://nginx.org/en/docs/windows.html) and add its directory to your user `PATH`. On macOS, Homebrew is one option. On Linux, use your distribution's package manager.
+- Install `cloudflared` on `PATH` if you use a tunnel. Python is optional for client examples and is independent of server startup.
+
+Install the project dependencies with `pnpm install --frozen-lockfile`. Copy `.env.example` to `.env` using your file manager or terminal. Generate your API secret with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` and set `LLM_API_SECRET` in `.env`.
+
+Use the Ollama desktop application or `ollama serve` for a separately managed backend. If the local backend is stopped, `pnpm start` starts it automatically. Pull your chosen model on that host with `ollama pull <model-name>`. Set `LLM_MODEL` in `.env` to that exact name. The gateway defaults its model allowlist to `LLM_MODEL`. If you set `ALLOWED_MODELS`, list every model your clients should access, separated by commas.
+
+There is no universal 32 GB or 64 GB requirement. Inference memory depends on model size, quantization, context length, images, and parallel requests. Disk space must accommodate the downloaded model. A smaller model permits smaller hardware. Vision requests require a model with image support. CPU inference trades speed for broader hardware compatibility. GPU support follows [Ollama's compatibility list](https://docs.ollama.com/gpu).
+
+```text
+pnpm verify:env
+pnpm verify:model
+pnpm start
+```
+
+`verify:env` checks the gateway's Node runtime and native SQLite/image libraries. `verify:model` asks the configured Ollama host to load each allowed model and reports its memory allocation. Startup performs both checks. Missing models, memory failures, backend errors, and load timeouts fail startup with the model name and cause. Models are loaded sequentially, so this checks individual availability rather than simultaneous residency. Later requests with larger contexts or higher concurrency still need additional memory. Ollama remains responsible for allocation at request time.
+
+For a remote inference host, set `OLLAMA_BASE_URL` to its reachable URL. Model checks run on that host through its API. Your gateway machine does not need enough RAM or a GPU to run the model. Protect the connection and restrict backend network access.
+
+Windows support uses native Node processes and a named pipe for stop requests. macOS and Linux use a local Unix socket. If an unclean OS shutdown leaves a stale Unix socket, remove the `edgeinference-*.sock` file for this project from your OS temporary directory before restarting. Startup reports the exact socket path.
 
 ### 5.4 Manual Step-by-Step Execution
 If you prefer running components individually:
@@ -614,7 +603,7 @@ If you prefer running components individually:
 
 ## 6. Background Process Management (macOS launchd)
 
-EdgeInference uses macOS `launchd` for automatic startup, crash recovery, and logging without third-party process managers:
+The following optional configuration applies to macOS. On Linux or Windows, supervise the portable runner with your OS service manager. For macOS, `launchd` supports automatic startup, crash recovery, and logging:
 
 - Gateway plist: [`infra/launchd/com.edgeinference.gateway.plist`](infra/launchd/com.edgeinference.gateway.plist)
 - Nginx plist: [`infra/launchd/com.edgeinference.nginx.plist`](infra/launchd/com.edgeinference.nginx.plist)
@@ -633,7 +622,7 @@ launchctl load ~/Library/LaunchAgents/com.edgeinference.nginx.plist
 
 ## 7. Performance Benchmarks
 
-Measured on Apple M1 Max (64GB RAM):
+Historical measurements on Apple M1 Max (64GB RAM), using the original model configuration. Your hardware, backend version, and model determine latency and memory use:
 
 - **Cold Start Latency**: 18,665 ms (loads 20.09 GB into VRAM and compiles Metal shaders)
 - **Warm Start Text Latency**: 1,887 ms

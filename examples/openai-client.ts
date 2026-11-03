@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { hashSecretSha256 } from "../gateway/src/client/cryptoAuth.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -30,7 +31,7 @@ export function createInferenceClient(apiKey = LLM_API_SECRET, headers = default
   }
   return new OpenAI({
     baseURL: LLM_BASE_URL,
-    apiKey,
+    apiKey: hashSecretSha256(apiKey),
     defaultHeaders: headers
   });
 }

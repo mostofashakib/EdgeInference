@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createApp, type AppDependencies } from "../../gateway/src/app.js";
@@ -130,7 +131,7 @@ describe("M6 Cloudflare Access & Dual-Authentication Gate", () => {
       headers: {
         "cf-access-client-id": validCfClientId,
         "cf-access-client-secret": validCfClientSecret,
-        "authorization": `Bearer ${validApiSecret}`
+        "authorization": `Bearer ${hashSecretSha256(validApiSecret)}`
       },
       payload: {
         model: "qwen3.8:27b",
@@ -150,7 +151,7 @@ describe("M6 Cloudflare Access & Dual-Authentication Gate", () => {
       url: "/v1/chat/completions",
       headers: {
         // Missing cf-access headers
-        "authorization": `Bearer ${validApiSecret}`
+        "authorization": `Bearer ${hashSecretSha256(validApiSecret)}`
       },
       payload: {
         model: "qwen3.8:27b",
@@ -171,7 +172,7 @@ describe("M6 Cloudflare Access & Dual-Authentication Gate", () => {
       headers: {
         "cf-access-client-id": "revoked-client-id",
         "cf-access-client-secret": "revoked-client-secret",
-        "authorization": `Bearer ${validApiSecret}`
+        "authorization": `Bearer ${hashSecretSha256(validApiSecret)}`
       },
       payload: {
         model: "qwen3.8:27b",

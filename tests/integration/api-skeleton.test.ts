@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { createApp, type AppDependencies } from "../../gateway/src/app.js";
@@ -63,6 +64,17 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
   });
 
   describe("Authentication Gate (onRequest hook)", () => {
+    it.each([primarySecret, secondarySecret])("rejects raw configured credentials before inference", async (secret) => {
+      const res = await app.inject({
+        method: "POST", url: "/v1/chat/completions",
+        headers: { authorization: `Bearer ${secret}` },
+        payload: { model: "qwen3.8:27b", messages: [{ role: "user", content: "Hello" }] }
+      });
+      expect(res.statusCode).toBe(401);
+      expect(res.payload).not.toContain(secret);
+      expect(fakeInference.generateCallCount).toBe(0);
+    });
+
     it("returns HTTP 401 when Authorization header is missing", async () => {
       // Act
       const res = await app.inject({
@@ -156,7 +168,7 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { authorization: `Bearer ${secondarySecret}` },
+        headers: { authorization: `Bearer ${hashSecretSha256(secondarySecret)}` },
         payload: {
           model: "qwen3.8:27b",
           messages: [{ role: "user", content: "Hello secondary" }]
@@ -175,7 +187,7 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { authorization: `Bearer ${primarySecret}` },
+        headers: { authorization: `Bearer ${hashSecretSha256(primarySecret)}` },
         payload: {
           model: "qwen3.8:27b",
           messages: [{ role: "user", content: "Ping" }]
@@ -213,7 +225,7 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { authorization: `Bearer ${primarySecret}` },
+        headers: { authorization: `Bearer ${hashSecretSha256(primarySecret)}` },
         payload: {
           model: "qwen3.8:27b",
           messages: [{ role: "user", content: "Testing swap" }]
@@ -232,7 +244,7 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { authorization: `Bearer ${primarySecret}` },
+        headers: { authorization: `Bearer ${hashSecretSha256(primarySecret)}` },
         payload: {
           model: "qwen3.8:27b",
           messages: [{ role: "user", content: "Stream me" }],
@@ -268,7 +280,7 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
       const res = await app.inject({
         method: "GET",
         url: "/unknown/route",
-        headers: { authorization: `Bearer ${primarySecret}` }
+        headers: { authorization: `Bearer ${hashSecretSha256(primarySecret)}` }
       });
 
       // Assert
@@ -280,7 +292,7 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { authorization: `Bearer ${primarySecret}` },
+        headers: { authorization: `Bearer ${hashSecretSha256(primarySecret)}` },
         payload: {
           model: "unsupported-model-v1",
           messages: [{ role: "user", content: "Hello" }]
@@ -301,7 +313,7 @@ describe("M2 API Skeleton, Dependency Injection & Authentication", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { authorization: `Bearer ${primarySecret}` },
+        headers: { authorization: `Bearer ${hashSecretSha256(primarySecret)}` },
         payload: {
           model: "qwen3.8:27b",
           messages: [{ role: "user", content: bigMessage }]

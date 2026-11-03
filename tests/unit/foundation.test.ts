@@ -1,37 +1,23 @@
 import { describe, it, expect } from "vitest";
-import os from "node:os";
 import Database from "better-sqlite3";
 import sharp from "sharp";
+import { runEnvironmentAudit } from "../../scripts/verify/audit-environment.js";
 import { timingSafeEqualString } from "../../gateway/src/domain/utils/timingSafe.js";
 
 describe("M0 Foundation Tests", () => {
   describe("System Environment & Hardware", () => {
-    it("runs on Apple Silicon arm64 architecture", () => {
-      // Arrange & Act
-      const arch = process.arch;
-
-      // Assert
-      expect(arch).toBe("arm64");
+    it("meets gateway runtime requirements on the current platform", async () => {
+      const audit = await runEnvironmentAudit();
+      expect(audit.nativeModulesLoaded).toBe(true);
+      expect(audit.passed).toBe(true);
     });
 
-    it("runs on modern Node.js runtime (>= 22)", () => {
-      // Arrange & Act
-      const nodeMajor = Number(process.versions.node.split(".")[0]);
-
-      // Assert
-      expect(nodeMajor).toBeGreaterThanOrEqual(22);
-    });
-
-    it("has at least 32GB unified system memory", () => {
-      // Arrange & Act
-      const totalMemGiB = os.totalmem() / (1024 * 1024 * 1024);
-
-      // Assert: target machine is 64GB M1 Max, threshold >= 32GB
-      expect(totalMemGiB).toBeGreaterThanOrEqual(32);
+    it("runs on Node.js >= 24", () => {
+      expect(Number(process.versions.node.split(".")[0])).toBeGreaterThanOrEqual(24);
     });
   });
 
-  describe("Native Modules Compatibility (Apple Silicon arm64)", () => {
+  describe("Native Modules Compatibility", () => {
     it("initializes SQLite in WAL mode and executes atomic operations", () => {
       // Arrange
       const db = new Database(":memory:");

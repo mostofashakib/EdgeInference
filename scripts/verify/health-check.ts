@@ -47,18 +47,23 @@ export async function runHealthCheck(): Promise<{
   services: ServiceHealth[];
 }> {
   const services: ServiceHealth[] = [];
+  const backend = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+  const models = (process.env.ALLOWED_MODELS ?? process.env.LLM_MODEL ?? "qwen3.8:27b").split(",").map((model) => model.trim());
+  const configuredHost = process.env.HOST || "127.0.0.1";
+  const host = configuredHost === "0.0.0.0" ? "127.0.0.1" : configuredHost === "::" ? "::1" : configuredHost;
+  const gateway = `http://${host.includes(":") ? `[${host}]` : host}:${process.env.PORT || "8765"}`;
 
   // 1. Ollama Inference Engine
   services.push(
-    await checkService("Ollama Engine", "http://127.0.0.1:11434/api/tags", async (res) => {
+    await checkService("Ollama Engine", `${backend}/api/tags`, async (res) => {
       const data = (await res.json()) as { models?: Array<{ name: string }> };
-      return (data.models?.some((m) => m.name.includes("qwen3.8:27b"))) ?? false;
+      return models.every((model) => model.length > 0 && data.models?.some((entry) => entry.name === (model.includes(":") ? model : `${model}:latest`)));
     })
   );
 
   // 2. Fastify Gateway
   services.push(
-    await checkService("Fastify Gateway", "http://127.0.0.1:8765/health", async (res) => {
+    await checkService("Fastify Gateway", `${gateway}/health`, async (res) => {
       const data = (await res.json()) as { status?: string };
       return data.status === "healthy";
     })

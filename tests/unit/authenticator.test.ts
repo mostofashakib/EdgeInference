@@ -11,9 +11,9 @@ describe("BearerTokenAuthenticator", () => {
     { keyId: "key-secondary", secret: secondarySecret }
   ]);
 
-  it("passes authentication with valid primary secret", () => {
+  it("passes authentication with the primary secret digest", () => {
     // Arrange & Act
-    const result = authenticator.authenticate(`Bearer ${primarySecret}`);
+    const result = authenticator.authenticate(`Bearer ${crypto.createHash("sha256").update(primarySecret).digest("hex")}`);
 
     // Assert
     expect(result.authenticated).toBe(true);
@@ -22,15 +22,44 @@ describe("BearerTokenAuthenticator", () => {
     }
   });
 
-  it("passes authentication with valid secondary rotated secret", () => {
+  it("passes authentication with the rotated secret digest", () => {
     // Arrange & Act
-    const result = authenticator.authenticate(`Bearer ${secondarySecret}`);
+    const result = authenticator.authenticate(`Bearer ${crypto.createHash("sha256").update(secondarySecret).digest("hex")}`);
 
     // Assert
     expect(result.authenticated).toBe(true);
     if (result.authenticated) {
       expect(result.keyId).toBe("key-secondary");
     }
+  });
+
+  it.each([primarySecret, secondarySecret])("rejects a raw configured secret in every token header", (secret) => {
+    expect(authenticator.authenticate(`Bearer ${secret}`).authenticated).toBe(false);
+    expect(authenticator.authenticate(`Hashed ${secret}`).authenticated).toBe(false);
+    expect(authenticator.authenticate(undefined, { headers: { "x-hashed-token": secret } }).authenticated).toBe(false);
+  });
+
+  it("rejects a raw Bearer secret even alongside valid hashed authentication", () => {
+    const digest = crypto.createHash("sha256").update(primarySecret).digest("hex");
+    expect(authenticator.authenticate(`Bearer ${primarySecret}`, { headers: { "x-hashed-token": digest } }).authenticated).toBe(false);
+  });
+
+  it.each(["long-secret with spaces", "long,secret", " padded secret "])(
+    "rejects raw secrets containing whitespace or delimiters alongside valid hashed auth",
+    (secret) => {
+      const auth = new BearerTokenAuthenticator([{ keyId: "owner-primary", secret }]);
+      const digest = crypto.createHash("sha256").update(secret).digest("hex");
+      expect(auth.authenticate(`Bearer ${secret}`, { headers: { "x-hashed-token": digest } }).authenticated).toBe(false);
+      expect(auth.authenticate(`Bearer \t${secret}`, { headers: { "x-hashed-token": digest } }).authenticated).toBe(false);
+    }
+  );
+
+  it("rejects a configured raw secret even when it equals another key's digest", () => {
+    const digest = crypto.createHash("sha256").update(primarySecret).digest("hex");
+    const overlappingKeys = new BearerTokenAuthenticator([
+      { keyId: "first", secret: primarySecret }, { keyId: "second", secret: digest }
+    ]);
+    expect(overlappingKeys.authenticate(`Bearer ${digest}`).authenticated).toBe(false);
   });
 
   it("rejects when Authorization header is missing", () => {
@@ -88,7 +117,7 @@ describe("BearerTokenAuthenticator", () => {
     ]);
 
     // Act
-    const result = strictAuth.authenticate(`Bearer ${secondarySecret}`);
+    const result = strictAuth.authenticate(`Bearer ${crypto.createHash("sha256").update(secondarySecret).digest("hex")}`);
 
     // Assert
     expect(result.authenticated).toBe(false);
@@ -137,6 +166,18 @@ describe("BearerTokenAuthenticator", () => {
         expect(result.keyId).toBe("key-primary");
       }
     });
+
+    it.each(["authorization", "x-hashed-token", "x-signature", "x-signature-256"])(
+      "rejects raw credentials in repeated %s headers alongside valid HMAC",
+      (header) => {
+        const signature = crypto.createHmac("sha256", primarySecret).update(`${fixedTimestampSec}:POST:/v1/chat/completions`).digest("hex");
+        const digest = crypto.createHash("sha256").update(primarySecret).digest("hex");
+        const headers: Record<string, string | string[]> = { "x-signature": signature, "x-timestamp": fixedTimestampSec };
+        headers[header] = header === "authorization" ? [`Bearer ${digest}`, `Bearer ${primarySecret}`]
+          : header.startsWith("x-signature") ? [signature, primarySecret] : [digest, primarySecret];
+        expect(authenticator.authenticate(undefined, { headers, method: "POST", url: "/v1/chat/completions", now: fixedNow }).authenticated).toBe(false);
+      }
+    );
 
     it("rejects forged or incorrect HMAC-SHA256 signature", () => {
       const forgedSignature = "a".repeat(64);

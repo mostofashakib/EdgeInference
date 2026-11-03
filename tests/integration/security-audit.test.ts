@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import fs from "node:fs";
@@ -98,7 +99,7 @@ describe("M8 Security & Threat Model Verification Suite", () => {
   const validCfHeaders = {
     "cf-access-client-id": "valid-edge-client-id",
     "cf-access-client-secret": "s".repeat(64),
-    authorization: `Bearer ${secret}`
+    authorization: `Bearer ${hashSecretSha256(secret)}`
   };
 
   it("Security 1: Rejects model allowlist bypass and directory traversal attempts with HTTP 404", async () => {
@@ -223,7 +224,7 @@ describe("M8 Security & Threat Model Verification Suite", () => {
     const resNoCf = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "No CF" }]

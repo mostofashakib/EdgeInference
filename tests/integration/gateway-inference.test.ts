@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import fs from "node:fs";
@@ -75,7 +76,7 @@ describe("M3 Gateway Request Validation & Multimodal Inference", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Tell me a haiku" }]
@@ -92,7 +93,7 @@ describe("M3 Gateway Request Validation & Multimodal Inference", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [
@@ -124,7 +125,7 @@ describe("M3 Gateway Request Validation & Multimodal Inference", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [
@@ -152,7 +153,7 @@ describe("M3 Gateway Request Validation & Multimodal Inference", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [
@@ -180,7 +181,7 @@ describe("M3 Gateway Request Validation & Multimodal Inference", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [
@@ -207,7 +208,7 @@ describe("M3 Gateway Request Validation & Multimodal Inference", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Hi" }],
@@ -226,7 +227,7 @@ describe("M3 Gateway Request Validation & Multimodal Inference", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: longPrompt }]

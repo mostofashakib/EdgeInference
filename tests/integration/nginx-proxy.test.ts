@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { execSync } from "node:child_process";
@@ -71,7 +72,7 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${secret}`
+        "Authorization": `Bearer ${hashSecretSha256(secret)}`
       },
       body: JSON.stringify({
         model: "qwen3.8:27b",
@@ -137,7 +138,7 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${secret}`
+        "Authorization": `Bearer ${hashSecretSha256(secret)}`
       },
       body: JSON.stringify({
         model: "qwen3.8:27b",
@@ -163,7 +164,7 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${secret}`
+          "Authorization": `Bearer ${hashSecretSha256(secret)}`
         },
         body: JSON.stringify({
           model: "qwen3.8:27b",
@@ -185,7 +186,7 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${secret}`,
+          "Authorization": `Bearer ${hashSecretSha256(secret)}`,
           "X-Client-Role": "guest"
         },
         body: JSON.stringify({

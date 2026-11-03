@@ -10,12 +10,12 @@
 | Property | Value | Notes |
 | :--- | :--- | :--- |
 | **Local Base URL** | `http://127.0.0.1:8080/v1` | Reverse-proxied via Nginx with unbuffered SSE streaming |
-| **Global Base URL** | `https://llm.yourdomain.com/v1` or `https://<tunnel-id>.trycloudflare.com/v1` | For access across all devices (mobile, other PCs, servers) via `./run.sh --tunnel` |
+| **Global Base URL** | `https://llm.yourdomain.com/v1` or `https://<tunnel-id>.trycloudflare.com/v1` | For access across all devices (mobile, other PCs, servers) via `pnpm start:tunnel` |
 | **Direct Gateway URL** | `http://127.0.0.1:8765/v1` | Direct Fastify gateway (bypasses Nginx) |
 | **Browser Test / Health** | `GET /health` or `GET /` | No authentication required; returns `{"status":"healthy"}` (HTTP 200) |
 | **Chat Endpoint** | `POST /v1/chat/completions` | Standard OpenAI schema; strictly POST with JSON body + API secret |
 | **Primary Model** | `qwen3.8:27b` | Multimodal (Vision + Text), deep reasoning, coding |
-| **Hardware Target** | Apple Silicon M1 Max (64GB unified memory) | 100% Metal GPU offload via MLX / Ollama |
+| Hardware | macOS, Linux, or Windows with compatible Ollama hardware | CPU, supported GPU, or mixed inference. Model memory requirements apply to the Ollama host. |
 | **Wire Protocol** | JSON (`application/json`) / SSE (`text/event-stream`) | UTF-8 encoded |
 
 ---
@@ -38,7 +38,7 @@ To use this inference service from external devices (iPhone, Android, other lapt
 
 ```bash
 # Start with global encrypted HTTPS tunnel:
-./run.sh --tunnel
+pnpm start:tunnel
 # (or: pnpm start:tunnel)
 ```
 
@@ -53,7 +53,7 @@ The runner automatically outputs:
 #### Dedicated Subdomain: `llm.yourdomain.com` (Zero Impact on Main Website)
 If you have an existing portfolio or root website (e.g. `yourdomain.com`), it remains 100% untouched. Only the dedicated subdomain routes to this inference server:
 - `yourdomain.com` (A record) $\rightarrow$ Your existing web host / portfolio server.
-- `llm.yourdomain.com` (CNAME) $\rightarrow$ Encrypted Cloudflare Tunnel to this Apple Silicon machine.
+- `llm.yourdomain.com` (CNAME) $\rightarrow$ Encrypted Cloudflare Tunnel to your inference gateway.
 
 **Setup Steps in Cloudflare Zero Trust:**
 1. In [Cloudflare Zero Trust](https://one.dash.cloudflare.com) $\rightarrow$ **Networks** $\rightarrow$ **Tunnels** $\rightarrow$ **Create a Tunnel** (named `edge-inference`).
@@ -67,7 +67,7 @@ If you have an existing portfolio or root website (e.g. `yourdomain.com`), it re
    CLOUDFLARE_TUNNEL_TOKEN=your-cloudflare-tunnel-token
    CLOUDFLARE_TUNNEL_DOMAIN=llm.yourdomain.com
    ```
-4. Run `./run.sh --tunnel`. All requests to `https://llm.yourdomain.com/v1/chat/completions` route directly to EdgeInference!
+4. Run `pnpm start:tunnel`. All requests to `https://llm.yourdomain.com/v1/chat/completions` route directly to EdgeInference!
 
 ---
 
@@ -75,7 +75,7 @@ If you have an existing portfolio or root website (e.g. `yourdomain.com`), it re
 
 To prevent secret leakage across log files, proxies, and network monitors, this service implements a **Zero-Plaintext-Secret** security policy.
 
-The gateway checks credentials against `LLM_API_SECRET`. Matching this secret grants **Owner Status** (`role: "owner"`):
+The gateway checks credentials against `LLM_API_SECRET`. A valid signature or digest for this secret grants **Owner Status** (`role: "owner"`):
 - **Unlimited request throughput** (exempt from Nginx rate limits).
 - **Unlimited daily request quota** (exempt from SQLite daily quotas).
 - **DDoS immunity** (never throttled even if guest callers flood the gateway).
@@ -84,9 +84,10 @@ The gateway checks credentials against `LLM_API_SECRET`. Matching this secret gr
 
 | Method | Headers Sent | Replay-Safe? | Best For |
 | :--- | :--- | :---: | :--- |
-| **Method 1: Dynamic HMAC-SHA256 Signing** *(Recommended)* | `X-Signature: <hex>`<br>`X-Timestamp: <epoch_sec>` | **Yes** ($\pm 300\text{s}$ tolerance window) | Custom `fetch`/HTTP clients, microservices, backend apps |
-| **Method 2: Pre-Hashed SHA-256 Token** | `Authorization: Bearer <sha256_hex>` | Yes (preimage resistant) | Official `openai` SDK drop-in replacement |
-| **Method 3: Plaintext Bearer** *(Fallback)* | `Authorization: Bearer <raw_secret>` | No | Quick testing and CLI tools |
+| **Method 1: Dynamic HMAC-SHA256 Signing** *(Recommended)* | `X-Signature: <hex>`<br>`X-Timestamp: <epoch_sec>` | Limited ($\pm 300\text{s}$ timestamp window) | Custom `fetch`/HTTP clients, microservices, backend apps |
+| **Method 2: Pre-Hashed SHA-256 Token** | `Authorization: Bearer <sha256_hex>` | No (reusable token) | Official `openai` SDK drop-in replacement |
+
+Raw application API secrets are rejected with HTTP 401. Use HMAC-SHA256 or compute the SHA-256 digest locally before sending a token. No plaintext-secret fallback exists.
 
 ---
 
@@ -389,7 +390,7 @@ When writing agent logic, use this matrix to decide whether to retry:
 
 ## 7. Performance Profiles & Latency Budgets
 
-When designing timeouts in client applications, assume the following bounds on Apple Silicon (M1 Max):
+The following historical timings were measured on Apple Silicon (M1 Max). Choose client timeouts for your selected model and hardware. CPU inference and cold loads often take longer:
 
 - **Warm Text Generation**:
   - Time-To-First-Token (TTFT): **~130 ms**
@@ -414,12 +415,12 @@ To verify that your local environment or client application can successfully rea
 
 ```bash
 # 1. Start all services (if not already running)
-./run.sh
+pnpm start
 
 # 2. Run all interactive end-to-end flows
 pnpm flows
 
 # 3. Stop all services gracefully
-./kill.sh
+pnpm stop
 ```
 

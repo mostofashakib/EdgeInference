@@ -1,3 +1,4 @@
+import { createHashedBearerHeader } from "../../gateway/src/client/cryptoAuth.js";
 import fs from "node:fs";
 import path from "node:path";
 import { createApp } from "../../gateway/src/app.js";
@@ -203,7 +204,7 @@ async function main(): Promise<void> {
     console.log("\n[2/3] Benchmarking Fastify Gateway (127.0.0.1:8765)...");
     const gatewayStream = await measureStreaming(
       GATEWAY_URL,
-      { Authorization: `Bearer ${TEST_SECRET}` },
+      createHashedBearerHeader(TEST_SECRET),
       testPrompt
     );
     const gatewayTokSec = Number((gatewayStream.totalTokens / (gatewayStream.durationMs / 1000)).toFixed(1));
@@ -223,7 +224,7 @@ async function main(): Promise<void> {
     console.log("\n[3/3] Benchmarking Nginx -> Gateway -> Ollama (127.0.0.1:8080)...");
     const nginxStream = await measureStreaming(
       NGINX_URL,
-      { Authorization: `Bearer ${TEST_SECRET}` },
+      createHashedBearerHeader(TEST_SECRET),
       testPrompt
     );
     const nginxTokSec = Number((nginxStream.totalTokens / (nginxStream.durationMs / 1000)).toFixed(1));
@@ -243,7 +244,7 @@ async function main(): Promise<void> {
     console.log("\n[4] Benchmarking Multimodal Vision through Nginx Reverse Proxy (8080)...");
     const visionBench = await measureVision(
       NGINX_URL,
-      { Authorization: `Bearer ${TEST_SECRET}` },
+      createHashedBearerHeader(TEST_SECRET),
       imagePath,
       "Identify the shapes and colors."
     );

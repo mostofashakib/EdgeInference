@@ -4,16 +4,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "./run.sh",
-    "start:tunnel": "./run.sh --tunnel",
-    "stop": "./kill.sh",
+    "start": "node --import tsx scripts/runtime/launcher.ts start",
+    "start:tunnel": "node --import tsx scripts/runtime/launcher.ts start --tunnel",
+    "stop": "node --import tsx scripts/runtime/launcher.ts stop",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "flows": "tsx scripts/flows/run-all-flows.ts",
     "build": "tsc",
-    "verify:env": "tsx scripts/verify/audit-environment.ts"
+    "verify:env": "tsx scripts/verify/audit-environment.ts",
+    "verify:model": "node --import tsx scripts/runtime/launcher.ts verify"
   },
   "keywords": [],
   "author": "mostofashakib (https://github.com/mostofashakib)",
@@ -43,5 +44,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

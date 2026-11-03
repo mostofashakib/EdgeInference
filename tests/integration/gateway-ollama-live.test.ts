@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { FastifyInstance } from "fastify";
 import fs from "node:fs";
@@ -14,6 +15,9 @@ import {
   FakeMetricsRecorder
 } from "../fakes/index.js";
 
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+const MODEL_NAME = process.env.LLM_MODEL || "qwen3.8:27b";
+
 describe("M3 Gateway with Real Ollama Live Integration", () => {
   const secret = "b".repeat(64);
   let app: FastifyInstance;
@@ -22,16 +26,16 @@ describe("M3 Gateway with Real Ollama Live Integration", () => {
 
   beforeAll(async () => {
     // Check Ollama is reachable
-    const ping = await fetch("http://127.0.0.1:11434/api/tags").catch(() => null);
+    const ping = await fetch(`${OLLAMA_BASE_URL}/api/tags`).catch(() => null);
     if (!ping || !ping.ok) {
-      throw new Error("Ollama is not running on 127.0.0.1:11434");
+      throw new Error(`Ollama is not running at ${OLLAMA_BASE_URL}`);
     }
 
     const config = loadConfig({
       NODE_ENV: "test",
       LLM_API_SECRET: secret,
-      ALLOWED_MODELS: "qwen3.8:27b",
-      OLLAMA_BASE_URL: "http://127.0.0.1:11434"
+      ALLOWED_MODELS: MODEL_NAME,
+      OLLAMA_BASE_URL
     });
 
     const authenticator = new BearerTokenAuthenticator([{ keyId: "live-key", secret }]);
@@ -65,9 +69,9 @@ describe("M3 Gateway with Real Ollama Live Integration", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
-        model: "qwen3.8:27b",
+        model: MODEL_NAME,
         messages: [{ role: "user", content: "Reply with exactly 'GATEWAY_TEST_OK'" }],
         temperature: 0.1
       }
@@ -82,9 +86,9 @@ describe("M3 Gateway with Real Ollama Live Integration", () => {
     const res = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
-        model: "qwen3.8:27b",
+        model: MODEL_NAME,
         messages: [
           {
             role: "user",
@@ -114,7 +118,7 @@ describe("M3 Gateway with Real Ollama Live Integration", () => {
       url: "/v1/chat/completions",
       headers: { authorization: "Bearer wrong_secret" },
       payload: {
-        model: "qwen3.8:27b",
+        model: MODEL_NAME,
         messages: [{ role: "user", content: "This should not reach Ollama" }]
       }
     });

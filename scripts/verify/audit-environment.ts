@@ -2,6 +2,7 @@ import os from "node:os";
 import net from "node:net";
 import Database from "better-sqlite3";
 import sharp from "sharp";
+import { detectHost } from "../runtime/host-runtime.js";
 
 interface PortCheckResult {
   port: number;
@@ -38,6 +39,9 @@ function checkPort(port: number, host = "127.0.0.1"): Promise<PortCheckResult> {
 }
 
 export async function runEnvironmentAudit(): Promise<{
+  platform: NodeJS.Platform;
+  cpuModel: string;
+  logicalCpus: number;
   arch: string;
   nodeVersion: string;
   totalMemoryGiB: number;
@@ -45,7 +49,8 @@ export async function runEnvironmentAudit(): Promise<{
   ports: PortCheckResult[];
   passed: boolean;
 }> {
-  const arch = process.arch;
+  const hardware = detectHost();
+  const arch = hardware.arch;
   const nodeVersion = process.version;
   const totalMemoryBytes = os.totalmem();
   const totalMemoryGiB = Math.round((totalMemoryBytes / (1024 * 1024 * 1024)) * 100) / 100;
@@ -86,12 +91,13 @@ export async function runEnvironmentAudit(): Promise<{
   const nodeMajor = parseInt(nodeVersion.replace(/^v/, "").split(".")[0] || "0", 10);
 
   const passed =
-    arch === "arm64" &&
-    nodeMajor >= 22 &&
-    totalMemoryGiB >= 32 &&
+    nodeMajor >= 24 &&
     nativeModulesLoaded;
 
   return {
+    platform: hardware.platform,
+    cpuModel: hardware.cpuModel,
+    logicalCpus: hardware.logicalCpus,
     arch,
     nodeVersion,
     totalMemoryGiB,
@@ -106,9 +112,11 @@ if (process.argv[1]?.endsWith("audit-environment.ts") || process.argv[1]?.endsWi
   console.log("=== EdgeInference M0 Environment & Service Diagnostic ===");
   runEnvironmentAudit()
     .then((result) => {
-      console.log(`Architecture: ${result.arch} (Expected: arm64)`);
+      console.log(`OS: ${result.platform}`);
+      console.log(`CPU: ${result.cpuModel} (${result.logicalCpus} logical cores)`);
+      console.log(`Architecture: ${result.arch} (reported by Node.js)`);
       console.log(`Node.js Version: ${result.nodeVersion} (Expected: >= v24)`);
-      console.log(`Unified Memory: ${result.totalMemoryGiB} GiB (Threshold: >= 32 GiB)`);
+      console.log(`System Memory: ${result.totalMemoryGiB} GiB (model requirements checked on the Ollama host)`);
       console.log(`Native Modules (better-sqlite3, sharp): ${result.nativeModulesLoaded ? "OK" : "FAILED"}`);
       console.log("Service Port Inspection:");
       for (const p of result.ports) {

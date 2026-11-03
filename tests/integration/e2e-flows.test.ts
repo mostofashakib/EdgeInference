@@ -80,7 +80,7 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
       url: "/v1/chat/completions",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${ownerSecret}`
+        authorization: `Bearer ${hashSecretSha256(ownerSecret)}`
       },
       payload: {
         model: "qwen3.8:27b",
@@ -112,7 +112,7 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
       url: "/v1/chat/completions",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${ownerSecret}`
+        authorization: `Bearer ${hashSecretSha256(ownerSecret)}`
       },
       payload: {
         model: "qwen3.8:27b",
@@ -144,7 +144,7 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
       url: "/v1/chat/completions",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${ownerSecret}`
+        authorization: `Bearer ${hashSecretSha256(ownerSecret)}`
       },
       payload: {
         model: "qwen3.8:27b",
@@ -170,7 +170,7 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
       url: "/v1/chat/completions",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${ownerSecret}`
+        authorization: `Bearer ${hashSecretSha256(ownerSecret)}`
       },
       payload: {
         model: "qwen3.8:27b",
@@ -190,7 +190,7 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
   it("Flow 5: Non-Owner DDoS Defense strictly limits guests to 3 req/min with HTTP 429", async () => {
     const guestHeaders = {
       "content-type": "application/json",
-      authorization: `Bearer ${guestSecret}`
+      authorization: `Bearer ${hashSecretSha256(guestSecret)}`
     };
 
     const makeRequest = (i: number) =>
@@ -233,11 +233,11 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
   it("Flow 6: Owner remains completely unthrottled even while non-owners are blocked by DDoS limits", async () => {
     const guestHeaders = {
       "content-type": "application/json",
-      authorization: `Bearer ${guestSecret}`
+      authorization: `Bearer ${hashSecretSha256(guestSecret)}`
     };
     const ownerHeaders = {
       "content-type": "application/json",
-      authorization: `Bearer ${ownerSecret}`
+      authorization: `Bearer ${hashSecretSha256(ownerSecret)}`
     };
 
     // 1. Guest exhausts their rate limit
@@ -284,7 +284,7 @@ describe("End-to-End User Flows & DDoS Abuse Defense", () => {
   it("Flow 7: Non-Owner Daily Quota Protection triggers HTTP 429 when daily budget is exhausted", async () => {
     const guestHeaders = {
       "content-type": "application/json",
-      authorization: `Bearer ${guestSecret}`
+      authorization: `Bearer ${hashSecretSha256(guestSecret)}`
     };
 
     // Simulate quota repository returning exhausted quota

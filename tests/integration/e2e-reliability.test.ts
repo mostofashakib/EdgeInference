@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import OpenAI from "openai";
@@ -100,7 +101,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
 
     const client = new OpenAI({
       baseURL: baseUrl,
-      apiKey: secret
+      apiKey: hashSecretSha256(secret)
     });
 
     const completion = await client.chat.completions.create({
@@ -125,7 +126,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
 
     const client = new OpenAI({
       baseURL: baseUrl,
-      apiKey: secret
+      apiKey: hashSecretSha256(secret)
     });
 
     const stream = await client.chat.completions.create({
@@ -153,7 +154,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
 
     const client = new OpenAI({
       baseURL: baseUrl,
-      apiKey: secret
+      apiKey: hashSecretSha256(secret)
     });
 
     const dummyDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -180,7 +181,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
 
     const client = new OpenAI({
       baseURL: baseUrl,
-      apiKey: secret
+      apiKey: hashSecretSha256(secret)
     });
 
     // 1. Simulate upstream failure
@@ -220,7 +221,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
 
     const client = new OpenAI({
       baseURL: baseUrl,
-      apiKey: secret
+      apiKey: hashSecretSha256(secret)
     });
 
     const abortController = new AbortController();
@@ -283,7 +284,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
 
     const client = new OpenAI({
       baseURL: baseUrl,
-      apiKey: secret
+      apiKey: hashSecretSha256(secret)
     });
 
     // Request 1 succeeds
@@ -334,7 +335,7 @@ describe("M7 Reliability and End-to-End Testing", () => {
 
     const client = new OpenAI({
       baseURL: baseUrl,
-      apiKey: secret,
+      apiKey: hashSecretSha256(secret),
       maxRetries: 0
     });
 

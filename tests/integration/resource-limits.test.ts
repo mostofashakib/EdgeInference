@@ -1,3 +1,4 @@
+import { hashSecretSha256 } from "../../gateway/src/client/cryptoAuth.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { FastifyInstance } from "fastify";
 import fs from "node:fs";
@@ -84,7 +85,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const res1 = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Req 1" }]
@@ -96,7 +97,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const res2 = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Req 2" }]
@@ -108,7 +109,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const res3 = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Req 3" }]
@@ -125,7 +126,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
       const res = await app.inject({
         method: "POST",
         url: "/v1/chat/completions",
-        headers: { authorization: `Bearer ${secret}` },
+        headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
         payload: {
           model: "qwen3.8:27b",
           messages: [{ role: "user", content: `Req ${i}` }]
@@ -162,7 +163,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const restartRes = await newApp.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Req after restart" }]
@@ -212,7 +213,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const p1 = concurrencyApp.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Active 1" }]
@@ -226,7 +227,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const p2 = concurrencyApp.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Queued 2" }]
@@ -239,7 +240,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const res3 = concurrencyApp.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Overflow 3" }]
@@ -278,7 +279,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const res1 = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Fail" }]
@@ -290,7 +291,7 @@ describe("M4 Resource Management: Quota, Concurrency, and Cancellation", () => {
     const res2 = await app.inject({
       method: "POST",
       url: "/v1/chat/completions",
-      headers: { authorization: `Bearer ${secret}` },
+      headers: { authorization: `Bearer ${hashSecretSha256(secret)}` },
       payload: {
         model: "qwen3.8:27b",
         messages: [{ role: "user", content: "Recover" }]

@@ -17,8 +17,10 @@ interface ChatCompletionResponse {
   };
 }
 
+
+if (fs.existsSync(".env")) process.loadEnvFile(".env");
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const MODEL_NAME = "qwen3.8:27b";
+const MODEL_NAME = process.env.LLM_MODEL || "qwen3.8:27b";
 
 async function runTextCompletion(prompt: string): Promise<{ text: string; durationMs: number }> {
   const start = performance.now();
@@ -145,7 +147,7 @@ async function checkGpuStatus(): Promise<{ loaded: boolean; processor: string; s
   if (!res.ok) throw new Error("Failed to query /api/ps");
   const data = (await res.json()) as { models?: Array<{ name: string; size: number; processor: string }> };
 
-  const current = data.models?.find((m) => m.name.includes("qwen3.8:27b"));
+  const current = data.models?.find((m) => m.name === (MODEL_NAME.includes(":") ? MODEL_NAME : `${MODEL_NAME}:latest`));
   if (!current) {
     return { loaded: false, processor: "none", size: "0" };
   }
@@ -157,7 +159,7 @@ async function checkGpuStatus(): Promise<{ loaded: boolean; processor: string; s
 }
 
 async function main(): Promise<void> {
-  console.log("=== EdgeInference M1 Ollama Verification Script ===");
+  console.log("=== EdgeInference Ollama Verification Script ===");
   console.log(`Endpoint: ${OLLAMA_BASE_URL}`);
   console.log(`Target Model: ${MODEL_NAME}`);
 
@@ -179,7 +181,7 @@ async function main(): Promise<void> {
   console.log(`Reasoning Response (${reasoning.durationMs.toFixed(0)} ms): ${reasoning.text.trim()}`);
 
   // 4. GPU Status Check via /api/ps
-  console.log("\n[Test 4] GPU & Metal Verification via /api/ps...");
+  console.log("\n[Test 4] CPU/GPU Allocation via /api/ps...");
   const gpu = await checkGpuStatus();
   console.log(`Model Loaded: ${gpu.loaded}`);
   console.log(`Processor Allocation: ${gpu.processor}`);
@@ -216,7 +218,7 @@ async function main(): Promise<void> {
   console.log(`Invalid model status code: ${invalidRes.status} (Expected: 404 or 400)`);
 
   console.log("\n===================================================");
-  console.log("All M1 Ollama Verification Checks Completed Successfully!");
+  console.log("All Ollama Verification Checks Completed Successfully!");
 }
 
 main().catch((err) => {
