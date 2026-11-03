@@ -140,7 +140,28 @@ fi
 if [[ ! -d "$ROOT/node_modules" ]]; then
   log "node_modules missing — installing dependencies via pnpm..."
   pnpm install --frozen-lockfile
-  ok "Dependencies installed"
+  ok "Node.js dependencies installed"
+fi
+
+# ── Ensure Python virtual environment & dependencies ─────────────────────────
+if command -v python3 >/dev/null 2>&1; then
+  if [[ ! -d "$ROOT/.venv" ]]; then
+    log "Creating Python virtual environment in .venv..."
+    python3 -m venv "$ROOT/.venv"
+    ok "Python virtual environment created (.venv)"
+  fi
+
+  # Activate virtual environment
+  # shellcheck source=/dev/null
+  source "$ROOT/.venv/bin/activate"
+
+  if [[ -f "$ROOT/requirements.txt" ]]; then
+    if ! python3 -c "import openai, requests" >/dev/null 2>&1; then
+      log "Installing Python dependencies from requirements.txt..."
+      pip install -q -r "$ROOT/requirements.txt"
+      ok "Python dependencies installed"
+    fi
+  fi
 fi
 
 # Ensure data and log directories exist
