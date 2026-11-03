@@ -100,8 +100,8 @@ export function createApp(deps: AppDependencies): FastifyInstance {
 
   // Mandatory Early Authentication Hook (onRequest lifecycle)
   app.addHook("onRequest", async (request, _reply) => {
-    // Health check endpoint is exempt from authentication
-    if (request.url === "/health" || request.url === "/live") {
+    // Root and Health check endpoints are exempt from authentication
+    if (request.url === "/" || request.url === "/health" || request.url === "/live") {
       return;
     }
 
@@ -128,6 +128,16 @@ export function createApp(deps: AppDependencies): FastifyInstance {
 
     request.authKeyId = authResult.keyId;
     request.authRole = authResult.role ?? (authResult.keyId.startsWith("owner") ? "owner" : "guest");
+  });
+
+  // Root service status endpoint
+  app.get("/", async (_request, reply) => {
+    return reply.status(200).send({
+      service: "EdgeInference",
+      status: "online",
+      timestamp: deps.clock.now().toISOString(),
+      models: deps.config.allowedModels
+    });
   });
 
   // Health endpoint

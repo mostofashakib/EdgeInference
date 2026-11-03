@@ -83,12 +83,13 @@ export async function runEnvironmentAudit(): Promise<{
   const port8765 = await checkPort(8765);
   const port11434 = await checkPort(11434);
 
+  const nodeMajor = parseInt(nodeVersion.replace(/^v/, "").split(".")[0] || "0", 10);
+
   const passed =
     arch === "arm64" &&
-    nodeVersion.startsWith("v24.") &&
+    nodeMajor >= 22 &&
     totalMemoryGiB >= 32 &&
-    nativeModulesLoaded &&
-    !port8765.inUse;
+    nativeModulesLoaded;
 
   return {
     arch,

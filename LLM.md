@@ -10,19 +10,31 @@
 | Property | Value | Notes |
 | :--- | :--- | :--- |
 | **Local Base URL** | `http://127.0.0.1:8080/v1` | Reverse-proxied via Nginx with unbuffered SSE streaming |
-| **Global Base URL** | `https://<tunnel-id>.trycloudflare.com/v1` | For access across all devices (mobile, other PCs, servers) via `./run.sh --tunnel` |
+| **Global Base URL** | `https://llm.yourdomain.com/v1` or `https://<tunnel-id>.trycloudflare.com/v1` | For access across all devices (mobile, other PCs, servers) via `./run.sh --tunnel` |
 | **Direct Gateway URL** | `http://127.0.0.1:8765/v1` | Direct Fastify gateway (bypasses Nginx) |
-| **Health Check** | `GET /health` | No authentication required; returns `{"status":"healthy"}` |
-| **Chat Endpoint** | `POST /v1/chat/completions` | Standard OpenAI schema |
+| **Browser Test / Health** | `GET /health` or `GET /` | No authentication required; returns `{"status":"healthy"}` (HTTP 200) |
+| **Chat Endpoint** | `POST /v1/chat/completions` | Standard OpenAI schema; strictly POST with JSON body + API secret |
 | **Primary Model** | `qwen3.8:27b` | Multimodal (Vision + Text), deep reasoning, coding |
 | **Hardware Target** | Apple Silicon M1 Max (64GB unified memory) | 100% Metal GPU offload via MLX / Ollama |
 | **Wire Protocol** | JSON (`application/json`) / SSE (`text/event-stream`) | UTF-8 encoded |
 
 ---
 
-### 1.1 Global Multi-Device Access (Mobile, Other Laptops, Remote Servers)
+### 1.1 Browser Navigation vs. API Calls (405 Method Not Allowed Explained)
 
-To use this inference service from other devices (e.g., iPhone, Android, different laptops, or cloud services), start the stack with Cloudflare Tunnel enabled:
+> [!NOTE]
+> **Why pasting the Chat URL into a browser returns `405 Method Not Allowed`:**
+> Web browser address bars **only send HTTP `GET` requests**.  
+> The OpenAI `/v1/chat/completions` endpoint is an inference API that strictly requires an **HTTP `POST`** request containing a JSON body and an `Authorization` header.
+>
+> - **To test in a web browser:** Open the Health check URL (`https://.../health` or `https://.../`), which returns `{"status":"healthy","models":["qwen3.8:27b"]}`.
+> - **To run model inference:** Send an HTTP `POST` to `/v1/chat/completions` using the OpenAI SDK, cURL, or HTTP clients shown below.
+
+---
+
+### 1.2 Global Multi-Device Access & Custom Subdomains
+
+To use this inference service from external devices (iPhone, Android, other laptops, remote servers), run:
 
 ```bash
 # Start with global encrypted HTTPS tunnel:
@@ -30,16 +42,32 @@ To use this inference service from other devices (e.g., iPhone, Android, differe
 # (or: pnpm start:tunnel)
 ```
 
-The runner outputs your unique global HTTPS URL:
+The runner automatically outputs:
 ```text
-  Global URL (All Devices) → https://your-tunnel-name.trycloudflare.com/v1/chat/completions
-  Global Health Check      → https://your-tunnel-name.trycloudflare.com/health
+  🌐 Global Access (All Devices / Internet):
+     Browser Test Link (Click to test)   → https://llm.yourdomain.com/health
+     OpenAI Base URL (For SDKs / Apps)   → https://llm.yourdomain.com/v1
+     Chat Endpoint (POST requests only)  → https://llm.yourdomain.com/v1/chat/completions
 ```
 
-**Configuring Apps on External Devices:**
-1. Set the client `baseURL` or `ENDPOINT_URL` to `https://your-tunnel-name.trycloudflare.com/v1` (or your permanent custom domain if configured).
-2. Set the client `apiKey` to `LLM_API_SECRET` (or pre-hash it using SHA-256).
-3. The cryptographic authentication (HMAC-SHA256 and pre-hashed token) operates identically across local and global endpoints. Raw secrets are never transmitted.
+#### Dedicated Subdomain: `llm.yourdomain.com` (Zero Impact on Main Website)
+If you have an existing portfolio or root website (e.g. `yourdomain.com`), it remains 100% untouched. Only the dedicated subdomain routes to this inference server:
+- `yourdomain.com` (A record) $\rightarrow$ Your existing web host / portfolio server.
+- `llm.yourdomain.com` (CNAME) $\rightarrow$ Encrypted Cloudflare Tunnel to this Apple Silicon machine.
+
+**Setup Steps in Cloudflare Zero Trust:**
+1. In [Cloudflare Zero Trust](https://one.dash.cloudflare.com) $\rightarrow$ **Networks** $\rightarrow$ **Tunnels** $\rightarrow$ **Create a Tunnel** (named `edge-inference`).
+2. Add a **Public Hostname**:
+   - Subdomain: `llm`
+   - Domain: `yourdomain.com`
+   - Service Type: `HTTP`
+   - Service URL: `127.0.0.1:8080`
+3. Copy the Tunnel Token and add it to your local `.env`:
+   ```env
+   CLOUDFLARE_TUNNEL_TOKEN=your-cloudflare-tunnel-token
+   CLOUDFLARE_TUNNEL_DOMAIN=llm.yourdomain.com
+   ```
+4. Run `./run.sh --tunnel`. All requests to `https://llm.yourdomain.com/v1/chat/completions` route directly to EdgeInference!
 
 ---
 

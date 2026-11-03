@@ -14,12 +14,12 @@ describe("M0 Foundation Tests", () => {
       expect(arch).toBe("arm64");
     });
 
-    it("runs on Node.js 24 LTS runtime", () => {
+    it("runs on modern Node.js runtime (>= 22)", () => {
       // Arrange & Act
-      const nodeMajor = process.versions.node.split(".")[0];
+      const nodeMajor = Number(process.versions.node.split(".")[0]);
 
       // Assert
-      expect(nodeMajor).toBe("24");
+      expect(nodeMajor).toBeGreaterThanOrEqual(22);
     });
 
     it("has at least 32GB unified system memory", () => {

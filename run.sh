@@ -126,6 +126,11 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# Alias Cloudflare Tunnel environment variables
+CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-${CF_TUNNEL_TOKEN:-}}"
+CLOUDFLARE_TUNNEL_DOMAIN="${CLOUDFLARE_TUNNEL_DOMAIN:-${CF_TUNNEL_DOMAIN:-}}"
+CLOUDFLARE_TUNNEL_ENABLED="${CLOUDFLARE_TUNNEL_ENABLED:-${CF_TUNNEL_ENABLED:-false}}"
+
 # Enable tunnel if configured in .env or passed via CLI
 if [[ "${TUNNEL:-false}" == "true" || "${CLOUDFLARE_TUNNEL_ENABLED:-false}" == "true" || -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]]; then
   ENABLE_TUNNEL=true
@@ -229,7 +234,8 @@ if [[ "$ENABLE_TUNNEL" == "true" ]]; then
       # Permanent Named Tunnel with custom domain
       ( cloudflared tunnel run --token "$CLOUDFLARE_TUNNEL_TOKEN" 2>&1 ) | tunnel_log &
       TUNNEL_PID=$!
-      ok "Cloudflare Permanent Tunnel connected (Token mode)"
+      GLOBAL_URL="https://${CLOUDFLARE_TUNNEL_DOMAIN:-llm.yourdomain.com}"
+      ok "Cloudflare Permanent Tunnel connected ($GLOBAL_URL)"
     else
       # Quick Tunnel (Instant public HTTPS URL on trycloudflare.com)
       cloudflared tunnel --url http://127.0.0.1:8080 > "$TUNNEL_LOG" 2>&1 &
@@ -245,7 +251,7 @@ if [[ "$ENABLE_TUNNEL" == "true" ]]; then
       done
 
       if [[ -n "$GLOBAL_URL" ]]; then
-        ok "Cloudflare Quick Tunnel ready"
+        ok "Cloudflare Quick Tunnel ready ($GLOBAL_URL)"
       else
         warn "Could not extract Quick Tunnel URL within 10s (tunnel running in background)"
       fi
@@ -255,21 +261,26 @@ fi
 
 # ── Ready Banner ─────────────────────────────────────────────────────────────
 echo ""
-echo -e "  ${BOLD}EdgeInference is running${RESET}"
-echo -e "  ${GREEN}Local Ingress        ${RESET} → http://127.0.0.1:8080/v1/chat/completions"
-echo -e "  ${GREEN}Local Health Check   ${RESET} → http://127.0.0.1:8080/health"
+echo -e "  ${BOLD}${GREEN}✔ EdgeInference is running & ready for requests${RESET}"
+echo ""
 if [[ -n "$GLOBAL_URL" ]]; then
-echo -e "  ${CYAN}${BOLD}Global URL (All Devices)${RESET} → ${CYAN}${BOLD}$GLOBAL_URL/v1/chat/completions${RESET}"
-echo -e "  ${CYAN}Global Health Check  ${RESET} → $GLOBAL_URL/health"
+echo -e "  ${BOLD}🌐 Global Access (All Devices / Internet):${RESET}"
+echo -e "     ${CYAN}Browser Test Link (Click to test)   ${RESET} → ${CYAN}${BOLD}$GLOBAL_URL/health${RESET}"
+echo -e "     ${CYAN}OpenAI Base URL (For SDKs / Apps)   ${RESET} → ${CYAN}$GLOBAL_URL/v1${RESET}"
+echo -e "     ${CYAN}Chat Endpoint (POST requests only)  ${RESET} → ${CYAN}$GLOBAL_URL/v1/chat/completions${RESET}"
+echo ""
 fi
-echo -e "  ${CYAN}Gateway Direct       ${RESET} → http://127.0.0.1:$GATEWAY_PORT"
-echo -e "  ${MAGENTA}Ollama Upstream      ${RESET} → http://127.0.0.1:11434"
-echo -e "  ${BOLD}Model Target         ${RESET} → $TARGET_MODEL (100% Metal GPU)"
+echo -e "  ${BOLD}💻 Local Access (This Machine):${RESET}"
+echo -e "     ${GREEN}Browser Test Link (Click to test)   ${RESET} → ${GREEN}http://127.0.0.1:8080/health${RESET}"
+echo -e "     ${GREEN}OpenAI Base URL (For SDKs / Apps)   ${RESET} → ${GREEN}http://127.0.0.1:8080/v1${RESET}"
+echo -e "     ${GREEN}Chat Endpoint (POST requests only)  ${RESET} → ${GREEN}http://127.0.0.1:8080/v1/chat/completions${RESET}"
+echo ""
+echo -e "  ${MAGENTA}Target Model         ${RESET} → $TARGET_MODEL (100% Metal GPU)"
 echo -e "  ${YELLOW}Bearer Secret        ${RESET} → Loaded from local .env (HMAC/Pre-hash supported)"
 if [[ "$ENABLE_TUNNEL" == "false" ]]; then
 echo -e "  ${BOLD}Global Access Hint   ${RESET} → Run ${CYAN}./run.sh --tunnel${RESET} for global HTTPS access on any device"
 fi
-echo -e "  Press ${BOLD}Ctrl+C${RESET} to stop all"
+echo -e "  Press ${BOLD}Ctrl+C${RESET} to stop all services"
 echo ""
 
 # ── Wait for background processes ────────────────────────────────────────────

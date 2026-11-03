@@ -531,7 +531,53 @@ Start or stop the entire stack with a single command (modeled after Forge):
 # (or: pnpm stop)
 ```
 
-### 5.2 Prerequisites
+The runner displays a clear readiness banner:
+```text
+  ✔ EdgeInference is running & ready for requests
+
+  🌐 Global Access (All Devices / Internet):
+     Browser Test Link (Click to test)   → https://llm.yourdomain.com/health
+     OpenAI Base URL (For SDKs / Apps)   → https://llm.yourdomain.com/v1
+     Chat Endpoint (POST requests only)  → https://llm.yourdomain.com/v1/chat/completions
+
+  💻 Local Access (This Machine):
+     Browser Test Link (Click to test)   → http://127.0.0.1:8080/health
+     OpenAI Base URL (For SDKs / Apps)   → http://127.0.0.1:8080/v1
+     Chat Endpoint (POST requests only)  → http://127.0.0.1:8080/v1/chat/completions
+```
+
+> [!NOTE]
+> **Browser Testing vs. Chat Completions:**  
+> If you paste the Chat Endpoint URL (`/v1/chat/completions`) into a browser address bar, it returns `{"error":{"message":"Method Not Allowed...","code":"method_not_allowed"}}` because browsers send HTTP `GET` requests, whereas the inference API strictly requires HTTP `POST` with a JSON payload and API secret.  
+> To test in a browser, click the **Browser Test Link** (`/health` or `/`), which responds immediately with `{"status":"healthy"}` and HTTP `200 OK`.
+
+### 5.2 Custom Domain Setup: `llm.yourdomain.com` (Zero Impact on Main Website)
+
+You can assign a dedicated subdomain like `llm.yourdomain.com` to this inference service while keeping your main website or portfolio at `yourdomain.com` 100% untouched:
+
+1. **DNS Architecture (Zero Interference)**:
+   - Apex domain `yourdomain.com` (A record) remains pointed to your existing web host. Your main website never experiences any disruption.
+   - Subdomain `llm.yourdomain.com` routes exclusively through an encrypted Cloudflare Tunnel directly to this local inference service.
+2. **Cloudflare Zero Trust Configuration**:
+   - Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com) $\rightarrow$ **Networks** $\rightarrow$ **Tunnels**.
+   - Create a tunnel named `edge-inference` and copy the Tunnel Token.
+   - Under **Public Hostnames**, add:
+     - Subdomain: `llm`
+     - Domain: `yourdomain.com`
+     - Service Type: `HTTP`
+     - Service URL: `127.0.0.1:8080`
+3. **Configure Local `.env`**:
+   ```env
+   CLOUDFLARE_TUNNEL_TOKEN=your-cloudflare-tunnel-token-here
+   CLOUDFLARE_TUNNEL_DOMAIN=llm.yourdomain.com
+   ```
+4. **Start**:
+   ```bash
+   ./run.sh --tunnel
+   ```
+   Now all your devices, apps, and coding agents worldwide can reach your inference machine at `https://llm.yourdomain.com/v1`!
+
+### 5.3 Prerequisites
 - Apple Silicon Mac with $\ge 32\text{ GB}$ unified memory (64 GB recommended).
 - Ollama installed and running with `qwen3.8:27b`:
   ```bash
@@ -543,7 +589,7 @@ Start or stop the entire stack with a single command (modeled after Forge):
   export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
   ```
 
-### 5.3 Manual Step-by-Step Execution
+### 5.4 Manual Step-by-Step Execution
 If you prefer running components individually:
 
 1. **Install Dependencies & Build**:

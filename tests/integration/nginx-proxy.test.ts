@@ -92,6 +92,14 @@ describe("M5 Nginx Reverse Proxy & Network Limits", () => {
     expect(body.status).toBe("healthy");
   });
 
+  it("serves friendly service discovery response on GET / for browsers", async () => {
+    const res = await fetch(`${nginxUrl}/`, { method: "GET" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { service: string; status: string };
+    expect(body.service).toBe("EdgeInference");
+    expect(body.status).toBe("online");
+  });
+
   it("rejects unauthorized routes with HTTP 404 and structured JSON error", async () => {
     const res = await fetch(`${nginxUrl}/api/tags`, {
       method: "GET"

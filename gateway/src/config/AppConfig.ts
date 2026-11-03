@@ -12,8 +12,11 @@ export const AppConfigSchema = z.object({
   guestDailyQuota: z.coerce.number().int().positive().default(10),
   guestRateLimitPerMinute: z.coerce.number().int().positive().default(3),
 
-  // Cloudflare Access Service Token Configuration
-  cfAccessEnabled: z.coerce.boolean().default(false),
+  // Cloudflare Access Service Token Configuration (only active when explicitly true or "true")
+  cfAccessEnabled: z.preprocess(
+    (val) => val === true || val === "true" || val === "1",
+    z.boolean()
+  ).default(false),
   cfAccessClientId: z.string().optional(),
   cfAccessClientSecret: z.string().optional(),
 
