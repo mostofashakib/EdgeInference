@@ -144,24 +144,38 @@ if [[ ! -d "$ROOT/node_modules" ]]; then
 fi
 
 # ── Ensure Python virtual environment & dependencies ─────────────────────────
+VENV_DIR="$ROOT/.venv"
+REQ_FILE="$ROOT/requirements.txt"
+REQ_STAMP="$VENV_DIR/.requirements.sha256"
+
 if command -v python3 >/dev/null 2>&1; then
-  if [[ ! -d "$ROOT/.venv" ]]; then
+  if [[ ! -d "$VENV_DIR" || ! -f "$VENV_DIR/bin/activate" ]]; then
     log "Creating Python virtual environment in .venv..."
-    python3 -m venv "$ROOT/.venv"
+    python3 -m venv "$VENV_DIR"
     ok "Python virtual environment created (.venv)"
   fi
 
   # Activate virtual environment
   # shellcheck source=/dev/null
-  source "$ROOT/.venv/bin/activate"
+  source "$VENV_DIR/bin/activate"
+  ok "Python virtual environment activated ($(python3 --version))"
 
-  if [[ -f "$ROOT/requirements.txt" ]]; then
-    if ! python3 -c "import openai, requests" >/dev/null 2>&1; then
-      log "Installing Python dependencies from requirements.txt..."
-      pip install -q -r "$ROOT/requirements.txt"
-      ok "Python dependencies installed"
+  if [[ -f "$REQ_FILE" ]]; then
+    CURRENT_HASH=$(shasum -a 256 "$REQ_FILE" 2>/dev/null | awk '{print $1}')
+    STORED_HASH=""
+    [[ -f "$REQ_STAMP" ]] && STORED_HASH=$(cat "$REQ_STAMP" 2>/dev/null || true)
+
+    if [[ "$CURRENT_HASH" != "$STORED_HASH" ]] || ! python3 -c "import openai, requests" >/dev/null 2>&1; then
+      log "Installing/updating Python dependencies from requirements.txt..."
+      pip install -q --upgrade -r "$REQ_FILE"
+      echo "$CURRENT_HASH" > "$REQ_STAMP"
+      ok "Python dependencies installed/updated from requirements.txt"
+    else
+      ok "Python dependencies up to date"
     fi
   fi
+else
+  warn "python3 is not installed — skipping Python virtual environment setup"
 fi
 
 # Ensure data and log directories exist
@@ -298,6 +312,7 @@ echo -e "     ${GREEN}Chat Endpoint (POST requests only)  ${RESET} → ${GREEN}h
 echo ""
 echo -e "  ${MAGENTA}Target Model         ${RESET} → $TARGET_MODEL (100% Metal GPU)"
 echo -e "  ${YELLOW}Bearer Secret        ${RESET} → Loaded from local .env (HMAC/Pre-hash supported)"
+echo -e "  ${BLUE}Python Environment   ${RESET} → .venv (Active)"
 if [[ "$ENABLE_TUNNEL" == "false" ]]; then
 echo -e "  ${BOLD}Global Access Hint   ${RESET} → Run ${CYAN}./run.sh --tunnel${RESET} for global HTTPS access on any device"
 fi
