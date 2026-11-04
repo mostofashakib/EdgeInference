@@ -1,426 +1,203 @@
-# LLM Integration Guide for AI Coding Agents
+# LLM integration guide
 
-> **Audience:** AI Coding Assistants, Autonomous Agents, and Developers integrating applications with this local inference gateway.
-> **Standard:** OpenAI-Compatible Chat Completions API (`v1/chat/completions`)
+Use this guide when connecting an application or coding agent to an EdgeInference installation. The API follows the supported subset of OpenAI Chat Completions defined in [the schemas](gateway/src/http/schemas/chatCompletion.ts).
 
----
+## Deployment configuration
 
-## 1. Quick Reference & Service Topology
+Read connection details from your application's environment. Do not infer a live endpoint, model, or credential from this repository.
 
-| Property | Value | Notes |
-| :--- | :--- | :--- |
-| **Local Base URL** | `http://127.0.0.1:8080/v1` | Reverse-proxied via Nginx with unbuffered SSE streaming |
-| **Global Base URL** | `https://llm.yourdomain.com/v1` or `https://<tunnel-id>.trycloudflare.com/v1` | For access across all devices (mobile, other PCs, servers) via `pnpm start:tunnel` |
-| **Direct Gateway URL** | `http://127.0.0.1:8765/v1` | Direct Fastify gateway (bypasses Nginx) |
-| **Browser Test / Health** | `GET /health` or `GET /` | No authentication required; returns `{"status":"healthy"}` (HTTP 200) |
-| **Chat Endpoint** | `POST /v1/chat/completions` | Standard OpenAI schema; strictly POST with JSON body + API secret |
-| **Primary Model** | `qwen3.8:27b` | Multimodal (Vision + Text), deep reasoning, coding |
-| Hardware | macOS, Linux, or Windows with compatible Ollama hardware | CPU, supported GPU, or mixed inference. Model memory requirements apply to the Ollama host. |
-| **Wire Protocol** | JSON (`application/json`) / SSE (`text/event-stream`) | UTF-8 encoded |
+| Variable | Required value |
+| --- | --- |
+| `LLM_BASE_URL` | Your API base URL, including `/v1`. |
+| `LLM_MODEL` | An installed model accepted by the deployment's `ALLOWED_MODELS`. |
+| `LLM_API_SECRET` | A configured owner or guest secret held by your trusted backend client. |
 
----
+`http://127.0.0.1:8080/v1` is the default API base URL for a local installation. `https://inference.example.com/v1` is a placeholder for a remote deployment. Neither is a published service endpoint. Replace `your-installed-model` in payload examples with your selected model.
 
-### 1.1 Browser Navigation vs. API Calls (405 Method Not Allowed Explained)
+The gateway runs on macOS, Linux, and Windows. Ollama selects CPU, supported GPU, or mixed inference. Model memory and driver requirements apply to the Ollama host. Image requests require a vision model.
 
-> [!NOTE]
-> **Why pasting the Chat URL into a browser returns `405 Method Not Allowed`:**
-> Web browser address bars **only send HTTP `GET` requests**.  
-> The OpenAI `/v1/chat/completions` endpoint is an inference API that strictly requires an **HTTP `POST`** request containing a JSON body and an `Authorization` header.
->
-> - **To test in a web browser:** Open the Health check URL (`https://.../health` or `https://.../`), which returns `{"status":"healthy","models":["qwen3.8:27b"]}`.
-> - **To run model inference:** Send an HTTP `POST` to `/v1/chat/completions` using the OpenAI SDK, cURL, or HTTP clients shown below.
+## Authentication
 
----
+Compute credentials locally before sending requests:
 
-### 1.2 Global Multi-Device Access & Custom Subdomains
+| Method | Headers | Behavior |
+| --- | --- | --- |
+| HMAC-SHA256 | `X-Signature`, `X-Timestamp` | Sign `timestamp:METHOD:/request/path` using the configured secret. |
+| SHA-256 digest | `Authorization: Bearer <sha256-hex>` | Use the digest as the OpenAI SDK API key. |
 
-To use this inference service from external devices (iPhone, Android, other laptops, remote servers), run:
+The gateway rejects raw application secrets with HTTP 401, including mixed-header requests that also contain valid credentials. Missing, empty, incorrect, malformed, or expired authentication also returns 401.
 
-```bash
-# Start with global encrypted HTTPS tunnel:
-pnpm start:tunnel
-# (or: pnpm start:tunnel)
-```
+HMAC timestamps must be within 300 seconds of server time. A valid signature remains reusable within that window. The current implementation does not track nonces or sign the request body. SHA-256 digests remain reusable until the underlying secret is removed or rotated. Protect both forms as credentials and use HTTPS for remote traffic.
 
-The runner automatically outputs:
-```text
-  🌐 Global Access (All Devices / Internet):
-     Browser Test Link (Click to test)   → https://llm.yourdomain.com/health
-     OpenAI Base URL (For SDKs / Apps)   → https://llm.yourdomain.com/v1
-     Chat Endpoint (POST requests only)  → https://llm.yourdomain.com/v1/chat/completions
-```
+Missing, empty, or whitespace-only server-side `LLM_API_SECRET` prevents gateway startup. A whitespace-only `LLM_API_SECRET_PREVIOUS` also prevents startup. An empty previous secret disables rotation.
 
-#### Dedicated Subdomain: `llm.yourdomain.com` (Zero Impact on Main Website)
-If you have an existing portfolio or root website (e.g. `yourdomain.com`), it remains 100% untouched. Only the dedicated subdomain routes to this inference server:
-- `yourdomain.com` (A record) $\rightarrow$ Your existing web host / portfolio server.
-- `llm.yourdomain.com` (CNAME) $\rightarrow$ Encrypted Cloudflare Tunnel to your inference gateway.
+Owner credentials bypass application quotas. Guest credentials use configured rate and daily quotas. Do not switch to an owner credential to evade a guest limit. Keep secrets and digests out of browser bundles, prompts, source control, URLs, and logs.
 
-**Setup Steps in Cloudflare Zero Trust:**
-1. In [Cloudflare Zero Trust](https://one.dash.cloudflare.com) $\rightarrow$ **Networks** $\rightarrow$ **Tunnels** $\rightarrow$ **Create a Tunnel** (named `edge-inference`).
-2. Add a **Public Hostname**:
-   - Subdomain: `llm`
-   - Domain: `yourdomain.com`
-   - Service Type: `HTTP`
-   - Service URL: `127.0.0.1:8080`
-3. Copy the Tunnel Token and add it to your local `.env`:
-   ```env
-   CLOUDFLARE_TUNNEL_TOKEN=your-cloudflare-tunnel-token
-   CLOUDFLARE_TUNNEL_DOMAIN=llm.yourdomain.com
-   ```
-4. Run `pnpm start:tunnel`. All requests to `https://llm.yourdomain.com/v1/chat/completions` route directly to EdgeInference!
+Cloudflare service tokens are separate from application authentication. If the deployment enables its Access check, supply `CF-Access-Client-Id` and `CF-Access-Client-Secret` alongside the HMAC or SHA-256 credential. Obtain these through the deployment operator's approved configuration channel.
 
----
+## TypeScript with the OpenAI SDK
 
-## 2. Authentication: Zero-Plaintext-Secret Policy
-
-To prevent secret leakage across log files, proxies, and network monitors, this service implements a **Zero-Plaintext-Secret** security policy.
-
-The gateway checks credentials against `LLM_API_SECRET`. A valid signature or digest for this secret grants **Owner Status** (`role: "owner"`):
-- **Unlimited request throughput** (exempt from Nginx rate limits).
-- **Unlimited daily request quota** (exempt from SQLite daily quotas).
-- **DDoS immunity** (never throttled even if guest callers flood the gateway).
-
-### Authentication Method Comparison
-
-| Method | Headers Sent | Replay-Safe? | Best For |
-| :--- | :--- | :---: | :--- |
-| **Method 1: Dynamic HMAC-SHA256 Signing** *(Recommended)* | `X-Signature: <hex>`<br>`X-Timestamp: <epoch_sec>` | Limited ($\pm 300\text{s}$ timestamp window) | Custom `fetch`/HTTP clients, microservices, backend apps |
-| **Method 2: Pre-Hashed SHA-256 Token** | `Authorization: Bearer <sha256_hex>` | No (reusable token) | Official `openai` SDK drop-in replacement |
-
-Raw application API secrets are rejected with HTTP 401. Use HMAC-SHA256 or compute the SHA-256 digest locally before sending a token. No plaintext-secret fallback exists.
-
----
-
-## 3. Copy-and-Paste Client Implementations
-
-### 3.1 TypeScript / Node.js (Pattern A: Dynamic HMAC-SHA256 — Recommended)
-
-Use this when writing backend code using native `fetch`:
+Load the private environment before running this code. All three variables are required.
 
 ```typescript
 import crypto from "node:crypto";
-
-const ENDPOINT_URL = process.env.LLM_ENDPOINT || "http://127.0.0.1:8080";
-const SECRET = process.env.LLM_API_SECRET!; // Raw secret stored ONLY in application's local .env
-
-/**
- * Creates dynamic HMAC-SHA256 headers. Raw secret is never transmitted.
- */
-function createHmacHeaders(secret: string, method = "POST", path = "/v1/chat/completions") {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const canonicalPayload = `${timestamp}:${method.toUpperCase()}:${path}`;
-  const signature = crypto.createHmac("sha256", secret).update(canonicalPayload).digest("hex");
-
-  return {
-    "X-Signature": signature,
-    "X-Timestamp": timestamp
-  };
-}
-
-// 1. Text Generation
-async function generateText(prompt: string) {
-  const path = "/v1/chat/completions";
-  const res = await fetch(`${ENDPOINT_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...createHmacHeaders(SECRET, "POST", path)
-    },
-    body: JSON.stringify({
-      model: "qwen3.8:27b",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 1024
-    })
-  });
-
-  if (!res.ok) throw new Error(`HTTP error ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.choices[0].message.content;
-}
-
-// 2. Token-by-Token Streaming
-async function streamText(prompt: string, onToken: (token: string) => void) {
-  const path = "/v1/chat/completions";
-  const res = await fetch(`${ENDPOINT_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...createHmacHeaders(SECRET, "POST", path)
-    },
-    body: JSON.stringify({
-      model: "qwen3.8:27b",
-      messages: [{ role: "user", content: prompt }],
-      stream: true
-    })
-  });
-
-  const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split("\n");
-
-    for (const line of lines) {
-      if (line.startsWith("data: ") && !line.includes("[DONE]")) {
-        try {
-          const parsed = JSON.parse(line.slice(6));
-          const text = parsed.choices[0]?.delta?.content || "";
-          if (text) onToken(text);
-        } catch {
-          // ignore partial parse
-        }
-      }
-    }
-  }
-}
-```
-
----
-
-### 3.2 TypeScript / Node.js (Pattern B: Official OpenAI SDK with Pre-Hashed Token)
-
-Use this when your application already uses the `openai` npm package:
-
-```typescript
 import OpenAI from "openai";
-import crypto from "node:crypto";
 
-const SECRET = process.env.LLM_API_SECRET!;
-// Pre-hash the secret locally so the raw secret is never sent over the wire:
-const hashedApiKey = crypto.createHash("sha256").update(SECRET).digest("hex");
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value?.trim()) throw new Error(`${name} is required`);
+  return value;
+}
 
+const model = requiredEnv("LLM_MODEL");
 const client = new OpenAI({
-  baseURL: process.env.LLM_BASE_URL || "http://127.0.0.1:8080/v1",
-  apiKey: hashedApiKey
+  baseURL: requiredEnv("LLM_BASE_URL"),
+  apiKey: crypto.createHash("sha256")
+    .update(requiredEnv("LLM_API_SECRET")).digest("hex")
 });
 
-// Non-streaming completion
 const response = await client.chat.completions.create({
-  model: "qwen3.8:27b",
-  messages: [
-    { role: "system", content: "You are an expert systems engineer." },
-    { role: "user", content: "Explain Raft consensus." }
-  ],
-  temperature: 0.2
+  model,
+  messages: [{ role: "user", content: "Explain a database transaction." }],
+  max_tokens: 128
 });
 console.log(response.choices[0]?.message.content);
 
-// Progressive streaming
 const stream = await client.chat.completions.create({
-  model: "qwen3.8:27b",
-  messages: [{ role: "user", content: "Write a haiku about GPUs." }],
+  model,
+  messages: [{ role: "user", content: "Explain a database transaction." }],
+  max_tokens: 128,
   stream: true
 });
-
 for await (const chunk of stream) {
   process.stdout.write(chunk.choices[0]?.delta?.content || "");
 }
 ```
 
----
+## TypeScript with HMAC
 
-### 3.3 Python Client (HMAC-SHA256 & Official OpenAI SDK)
+This example signs the timestamp, method, and path. Reusable helpers are in [cryptoAuth.ts](gateway/src/client/cryptoAuth.ts).
+
+```typescript
+import crypto from "node:crypto";
+
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value?.trim()) throw new Error(`${name} is required`);
+  return value;
+}
+
+const baseURL = requiredEnv("LLM_BASE_URL").replace(/\/+$/, "");
+const target = new URL(`${baseURL}/chat/completions`);
+const secret = requiredEnv("LLM_API_SECRET");
+const timestamp = String(Math.floor(Date.now() / 1000));
+const canonical = `${timestamp}:POST:${target.pathname}`;
+const signature = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
+
+const response = await fetch(target, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-Signature": signature,
+    "X-Timestamp": timestamp
+  },
+  body: JSON.stringify({
+    model: requiredEnv("LLM_MODEL"),
+    messages: [{ role: "user", content: "Explain a database transaction." }],
+    max_tokens: 128
+  })
+});
+if (!response.ok) throw new Error(`Inference request failed: HTTP ${response.status}`);
+console.log(await response.json());
+```
+
+## Python with the OpenAI SDK
+
+Export your private configuration into the process environment before running this example.
 
 ```python
-import os
-import time
-import hmac
 import hashlib
-import requests
+import os
 from openai import OpenAI
 
-ENDPOINT = os.getenv("LLM_ENDPOINT", "http://127.0.0.1:8080")
-SECRET = os.getenv("LLM_API_SECRET", "")
 
-# -------------------------------------------------------------
-# Option 1: Native requests with HMAC-SHA256 Signing
-# -------------------------------------------------------------
-def generate_hmac(prompt: str) -> str:
-    timestamp = str(int(time.time()))
-    canonical = f"{timestamp}:POST:/v1/chat/completions"
-    signature = hmac.new(SECRET.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+def required_env(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value.strip():
+        raise RuntimeError(f"{name} is required")
+    return value
 
-    res = requests.post(
-        f"{ENDPOINT}/v1/chat/completions",
-        headers={
-            "Content-Type": "application/json",
-            "X-Signature": signature,
-            "X-Timestamp": timestamp
-        },
-        json={
-            "model": "qwen3.8:27b",
-            "messages": [{"role": "user", "content": prompt}]
-        }
-    )
-    res.raise_for_status()
-    return res.json()["choices"][0]["message"]["content"]
-
-# -------------------------------------------------------------
-# Option 2: Official OpenAI Python SDK (with Pre-Hashed Token)
-# -------------------------------------------------------------
-hashed_token = hashlib.sha256(SECRET.encode("utf-8")).hexdigest()
 
 client = OpenAI(
-    base_url=f"{ENDPOINT}/v1",
-    api_key=hashed_token  # Raw secret is never transmitted!
+    base_url=required_env("LLM_BASE_URL"),
+    api_key=hashlib.sha256(required_env("LLM_API_SECRET").encode("utf-8")).hexdigest(),
 )
-
-stream = client.chat.completions.create(
-    model="qwen3.8:27b",
-    messages=[{"role": "user", "content": "Explain vector embeddings in 2 sentences."}],
-    stream=True
+response = client.chat.completions.create(
+    model=required_env("LLM_MODEL"),
+    messages=[{"role": "user", "content": "Explain a database transaction."}],
+    max_tokens=128,
 )
-
-for chunk in stream:
-    token = chunk.choices[0].delta.content or ""
-    print(token, end="", flush=True)
-print()
+print(response.choices[0].message.content)
 ```
 
----
+## Request contract
 
-### 3.4 cURL Command
-
-```bash
-# Using Pre-Hashed Secret:
-HASHED_SECRET=$(echo -n "$LLM_API_SECRET" | shasum -a 256 | awk '{print $1}')
-
-curl -s http://127.0.0.1:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $HASHED_SECRET" \
-  -d '{
-    "model": "qwen3.8:27b",
-    "messages": [{"role": "user", "content": "Ping"}]
-  }'
-```
-
----
-
-## 4. Multimodal Image Analysis Guide
-
-The service supports visual question answering, OCR, chart reading, and screenshot analysis.
-
-### Strict Rules for Images:
-1. **Base64 Data URLs Only**: Remote URLs (`http://`, `https://`) are **rejected** (`400 invalid_request_error`) to prevent SSRF and external bandwidth saturation.
-2. **Format**: `data:<mime-type>;base64,<encoded-data>` (e.g. `data:image/png;base64,iVBORw0KGgo...`).
-3. **Allowed Formats**: `image/jpeg`, `image/png`, `image/webp`.
-4. **Limits**:
-   - Maximum **2 images** per request.
-   - Maximum **4 MB** per raw image buffer.
-   - Maximum **20 megapixels** resolution (images are automatically normalized, stripped of EXIF metadata, and clamped to 2048px bounds).
-
-### Multimodal Request Payload Example:
+Send `POST /v1/chat/completions` with JSON and valid authentication. Visiting the chat URL in a browser sends GET and returns 405 through Nginx. Use `GET /health` to check service status. Status routes do not require application authentication and expose the configured model allowlist.
 
 ```json
 {
-  "model": "qwen3.8:27b",
-  "messages": [
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "What components are shown in this architecture diagram?"
-        },
-        {
-          "type": "image_url",
-          "image_url": {
-            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-          }
-        }
-      ]
-    }
-  ],
-  "max_tokens": 512
+  "model": "your-installed-model",
+  "messages": [{ "role": "user", "content": "Explain a database transaction." }],
+  "max_tokens": 128,
+  "stream": false
 }
 ```
 
----
+| Field | Constraint |
+| --- | --- |
+| `model` | Required and present in the deployment's allowlist. |
+| `messages` | 1 to 50 messages. Roles: `system`, `user`, `assistant`. |
+| `messages[].content` | Nonempty text or an array of text/image parts. |
+| `stream` | Optional boolean. Defaults to `false`. |
+| `temperature` | Optional number between 0 and 2. Omission delegates to the backend. |
+| `max_tokens` | Optional integer from 1 to 4096. Set it explicitly, since omission does not apply a gateway output cap. |
 
-## 5. Input Constraints & Validation Matrix
+Extra request fields are rejected. The default prompt limit is 32,000 characters. Nginx and the gateway default to a 12 MiB request-body limit. JSON responses contain `choices` and optional token usage. SSE responses contain `data:` JSON chunks and end with `data: [DONE]`. Use an SSE parser that preserves partial events between network chunks, or use the SDK's streaming iterator.
 
-| Parameter | Type | Default | Constraint / Limit |
-| :--- | :--- | :---: | :--- |
-| `model` | `string` | *(Required)* | Must match allowlist: `["qwen3.8:27b"]` |
-| `messages` | `array` | *(Required)* | 1 to 100 messages; total prompt length $\le 32,000$ characters |
-| `messages[].role` | `string` | *(Required)* | `"system"`, `"user"`, or `"assistant"` |
-| `messages[].content`| `string \| array` | *(Required)* | Text string or array of `{type:"text", text}` and `{type:"image_url", image_url}` |
-| `stream` | `boolean` | `false` | When `true`, returns SSE event stream; when `false`, returns single JSON object |
-| `temperature` | `number` | `0.7` | Value between `0.0` and `2.0` |
-| `max_tokens` | `integer` | `4096` | Max completion tokens to generate |
-| Request Body Size | HTTP Body | N/A | Maximum `12 MB` (enforced at both Nginx and Fastify) |
+For images, supply content parts in this format:
 
----
-
-## 6. Error Codes & Agent Retry Strategy
-
-When writing agent logic, use this matrix to decide whether to retry:
-
-| Status | Error Code | Error Type | Cause | Agent Action |
-| :---: | :--- | :--- | :--- | :--- |
-| `400` | `invalid_request_error` | `invalid_request_error` | Schema failure, remote image URL, prompt $> 32\text{k}$ chars, model not in allowlist | **Do NOT retry.** Fix the payload format. |
-| `401` | `unauthorized` | `authentication_error` | Missing credentials, invalid HMAC signature, timestamp skewed $> 300\text{s}$ | **Do NOT retry.** Check `LLM_API_SECRET` and clock sync. |
-| `404` | `not_found` | `invalid_request_error` | Route not recognized | **Do NOT retry.** Endpoint is strictly `/v1/chat/completions`. |
-| `405` | `method_not_allowed` | `invalid_request_error` | HTTP method is not `POST` | **Do NOT retry.** Use `POST`. |
-| `413` | `payload_too_large` | `invalid_request_error` | Body $> 12\text{MB}$ or image $> 4\text{MB}$ | **Do NOT retry.** Compress images or shorten prompt. |
-| `429` | `rate_limit_exceeded` | `rate_limit_error` | Non-owner guest exceeded 3 req/min | Wait 60 seconds or use owner secret. |
-| `429` | `quota_exceeded` | `rate_limit_error` | Non-owner guest exceeded daily quota | Use owner secret (`LLM_API_SECRET`). |
-| `429` | `inference_busy` | `rate_limit_error` | Concurrency admission queue full (1 active, 2 queued) | **Retry with exponential backoff** (e.g. 500ms, 1s, 2s). |
-| `502` | `bad_gateway` | `server_error` | Nginx cannot reach gateway or Ollama is starting up | **Retry with exponential backoff** (Ollama cold start takes ~18s). |
-| `500` | `internal_error` | `server_error` | Unhandled error in inference service | Retry once after 1 second. |
-
-### Canonical Error Response Schema:
 ```json
 {
-  "error": {
-    "message": "Description of what went wrong",
-    "type": "invalid_request_error",
-    "param": "messages",
-    "code": "invalid_request_error"
-  }
+  "type": "image_url",
+  "image_url": { "url": "data:image/png;base64,<base64-image-data>" }
 }
 ```
 
----
+Replace `<base64-image-data>` with your encoded image bytes. Remote image URLs are rejected. The gateway accepts JPEG, PNG, and WebP, verifies file signatures, and strips metadata during normalization. Defaults are two images per request, 4 MiB per image, and 20 megapixels per image.
 
-## 7. Performance Profiles & Latency Budgets
+## Error handling
 
-The following historical timings were measured on Apple Silicon (M1 Max). Choose client timeouts for your selected model and hardware. CPU inference and cold loads often take longer:
+| Status | Meaning | Client action |
+| --- | --- | --- |
+| 400 | Invalid input or unsupported field. | Correct the request before retrying. |
+| 401 | Missing, incorrect, malformed, raw, or expired credentials. | Check private configuration and clock synchronization. |
+| 404 | Unknown route or model outside the allowlist. | Check the path and configured model. |
+| 405 | Wrong HTTP method at the proxy. | Use POST for inference. |
+| 413 | Request body exceeds the configured limit. | Reduce the payload. |
+| 429 | Guest rate limit, daily quota, or inference queue limit. | Inspect `error.code`. Back off for rate/queue limits and wait for quota reset for daily limits. |
+| 502 | Proxy or upstream service failure. | Retry with bounded exponential backoff. |
+| 500 | Internal failure. | Use a bounded retry policy and report persistent failures. |
 
-- **Warm Text Generation**:
-  - Time-To-First-Token (TTFT): **~130 ms**
-  - Generation Speed: **~35 to 45 tokens/second**
-  - Recommended Client Timeout: **60 seconds**
-- **Multimodal Image Analysis**:
-  - Image Validation & Sharp Normalization: **~15 ms**
-  - Vision Encoding & Inference: **~2.8 seconds**
-  - Recommended Client Timeout: **90 seconds**
-- **Cold Start (First Request after Boot)**:
-  - Weight Loading (20.09 GB into Unified Memory) + Metal Shader Compilation: **~18.5 seconds**
-  - Recommended Timeout for First Request: **120 seconds**
-- **Long-Form Reasoning**:
-  - Deep chain-of-thought with 2,000+ output tokens: **~50 to 90 seconds**
-  - Use `stream: true` to avoid intermediate HTTP gateway timeouts!
+Errors contain `error.message`, `error.type`, `error.param`, and `error.code`. Do not log authentication headers when diagnosing failures.
 
----
+## Deployment checks
 
-## 8. Verified Test Runner for Agents
-
-To verify that your local environment or client application can successfully reach and interface with the inference stack, run the built-in diagnostic and user-flow suite:
-
-```bash
-# 1. Start all services (if not already running)
+```text
+pnpm verify:env
+pnpm verify:model
 pnpm start
-
-# 2. Run all interactive end-to-end flows
-pnpm flows
-
-# 3. Stop all services gracefully
-pnpm stop
 ```
 
+Use `pnpm flows` against your configured stack to exercise text, images, and streaming. Stop managed services with `pnpm stop`. See [README.md](README.md) for OS requirements, model selection, and optional tunnel setup.
+
+Measure cold-load time, time to first token, generation speed, and memory on your deployment. Select client timeouts for that model and hardware. The gateway has no overall inference deadline, so streaming does not replace a client timeout or cancellation policy.
