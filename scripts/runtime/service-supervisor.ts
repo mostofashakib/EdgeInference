@@ -1,6 +1,7 @@
 import { promisify } from "node:util";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
+import { rm } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -58,6 +59,39 @@ export async function terminateManagedProcess(child: ChildProcess, graceful = fa
   });
 }
 
+function listen(server: net.Server, endpoint: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(endpoint, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+}
+
+function supervisorIsListening(endpoint: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(endpoint);
+    socket.once("connect", () => { socket.destroy(); resolve(true); });
+    socket.once("error", (error: NodeJS.ErrnoException) => {
+      if (["ENOENT", "ECONNREFUSED"].includes(error.code ?? "")) resolve(false);
+      else reject(error);
+    });
+  });
+}
+
+async function claimControlEndpoint(server: net.Server, endpoint: string): Promise<void> {
+  try {
+    await listen(server, endpoint);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+    if (await supervisorIsListening(endpoint)) throw new Error("EdgeInference is already running for this checkout. Stop it with ./kill.sh first.", { cause: error });
+    // A supervisor that was killed cannot remove its socket, so the file outlives it.
+    await rm(endpoint, { force: true });
+    await listen(server, endpoint);
+  }
+}
+
 export async function runServices(commands: readonly ServiceCommand[], endpoint: string): Promise<void> {
   const children: Array<{ child: ChildProcess; service: ServiceCommand }> = [];
   const controller = new AbortController();
@@ -89,12 +123,10 @@ export async function runServices(commands: readonly ServiceCommand[], endpoint:
   });
   const onSignal = () => finish();
   try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(endpoint, resolve);
-    });
+    await claimControlEndpoint(server, endpoint);
     process.on("SIGINT", onSignal);
     process.on("SIGTERM", onSignal);
+    process.on("SIGHUP", onSignal);
     for (const service of commands) {
       if (controller.signal.aborted) break;
       const child = spawn(service.command, service.args, { stdio: "inherit", shell: false, env: service.env ?? process.env });
@@ -119,6 +151,7 @@ export async function runServices(commands: readonly ServiceCommand[], endpoint:
     for (const socket of stopRequests) socket.end("stopped\n");
     process.off("SIGINT", onSignal);
     process.off("SIGTERM", onSignal);
+    process.off("SIGHUP", onSignal);
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }

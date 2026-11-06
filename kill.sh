@@ -6,5 +6,5 @@ case "${BASH_SOURCE[0]}" in
 esac
 source ./scripts/runtime/bootstrap.sh
 edge_find_node
-# Stop only this checkout's managed services. No .env or GPU is needed to stop.
+# Stop this checkout's services and whatever holds their ports. No .env or GPU is needed to stop.
 exec "$EDGE_NODE_EXECUTABLE" --import tsx scripts/runtime/launcher.ts stop "$@"

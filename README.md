@@ -97,7 +97,7 @@ Stop with Ctrl+C in the running terminal or from another terminal:
 pnpm stop
 ```
 
-On macOS and Linux, `./run.sh` and `./kill.sh` provide the same start and stop operations. Stop commands affect processes managed by this checkout. A separately managed Ollama server stays running.
+On macOS and Linux, `./run.sh` and `./kill.sh` provide the same start and stop operations. Both stop this checkout's gateway and its tunnels. They also kill any process you own that listens on port 8080 or the gateway port, even if it belongs to another program, so keep other services off those ports. `./run.sh` does this before it starts. A separately managed Ollama server stays running. On Windows, `pnpm stop` only stops a running supervisor.
 
 The runner detects your OS and CPU architecture, checks the Node runtime and native modules, and locates executables through `PATH` and standard installation directories. For custom paths, set `NGINX_BIN`, `OLLAMA_BIN`, or `CLOUDFLARED_BIN`.
 

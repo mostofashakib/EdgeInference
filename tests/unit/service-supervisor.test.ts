@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { runServices, stopServices, controlEndpoint } from "../../scripts/runtime/service-supervisor.js";
@@ -10,6 +12,30 @@ async function waitForStop(endpoint: string) {
   }
   throw new Error("Supervisor did not start");
 }
+
+async function waitForListening(endpoint: string) {
+  for (let i = 0; i < 100; i++) {
+    const listening = await new Promise<boolean>((resolve) => {
+      const socket = net.connect(endpoint);
+      socket.once("connect", () => { socket.destroy(); resolve(true); });
+      socket.once("error", () => resolve(false));
+    });
+    if (listening) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error("Supervisor did not start");
+}
+
+// Closing a server removes its socket, so only a killed process leaves one behind.
+async function leaveDeadSocket(endpoint: string) {
+  const owner = spawn(process.execPath, ["-e", `require('node:net').createServer().listen(${JSON.stringify(endpoint)}, () => console.log('ready'))`], { stdio: ["ignore", "pipe", "inherit"] });
+  await new Promise((resolve) => owner.stdout.once("data", resolve));
+  const exited = new Promise((resolve) => owner.once("exit", resolve));
+  owner.kill("SIGKILL");
+  await exited;
+}
+
+const idleChild = { name: "idle", command: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"] };
 
 describe("portable process supervision", () => {
   it("selects a Windows named pipe or Unix socket without shell commands", () => {
@@ -48,6 +74,43 @@ describe("portable process supervision", () => {
     }], controlEndpoint(`unready-${process.pid}`))).rejects.toThrow("not healthy");
   });
 });
+
+it("shuts down cleanly when the terminal hangs up", async () => {
+  const endpoint = controlEndpoint(`hangup-${process.pid}`);
+  const running = runServices([idleChild], endpoint);
+  await waitForListening(endpoint);
+  process.emit("SIGHUP", "SIGHUP");
+  const stopped = await Promise.race([
+    running.then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000))
+  ]);
+  if (!stopped) { await waitForStop(endpoint); await running; }
+  expect(stopped).toBe(true);
+}, 10000);
+
+it("starts after a killed supervisor left its control socket behind", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "edge-dead-socket-"));
+  const endpoint = controlEndpoint(directory);
+  try {
+    await leaveDeadSocket(endpoint);
+    const running = runServices([idleChild], endpoint);
+    await waitForStop(endpoint);
+    await expect(running).resolves.toBeUndefined();
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}, 10000);
+
+it("refuses to start beside a running supervisor and leaves it running", async () => {
+  const endpoint = controlEndpoint(`duplicate-${process.pid}`);
+  const running = runServices([idleChild], endpoint);
+  try {
+    await waitForListening(endpoint);
+    await expect(runServices([idleChild], endpoint)).rejects.toThrow(/already running.*kill\.sh/);
+    await waitForListening(endpoint);
+  } finally {
+    await waitForStop(endpoint);
+    await running;
+  }
+}, 10000);
 
 it("runs service shutdown before terminating its child", async () => {
   let shutdown = false;

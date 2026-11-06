@@ -5,12 +5,24 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { loadConfig, type AppConfig } from "../../gateway/src/config/AppConfig.js";
+import { AppConfigSchema, loadConfig, type AppConfig } from "../../gateway/src/config/AppConfig.js";
 import { runEnvironmentAudit } from "../verify/audit-environment.js";
 import { checkModelReadiness } from "../verify/model-readiness.js";
 import { detectHost, resolveExecutable } from "./host-runtime.js";
 import { getOllamaService } from "./ollama-runtime.js";
-import { runServices, stopServices, controlEndpoint, type ServiceCommand } from "./service-supervisor.js";
+import { stopRunningServices } from "./service-cleanup.js";
+import { runServices, controlEndpoint, type ServiceCommand } from "./service-supervisor.js";
+
+const PROXY_PORT = 8080;
+
+function stopEverything(root: string, endpoint: string): Promise<string[]> {
+  return stopRunningServices({
+    endpoint, root, proxyPort: PROXY_PORT,
+    // Stopping must work without the secrets a full config requires.
+    ports: [PROXY_PORT, AppConfigSchema.shape.port.parse(process.env.PORT)],
+    tunnelToken: process.env.CLOUDFLARE_TUNNEL_TOKEN || process.env.CF_TUNNEL_TOKEN
+  });
+}
 
 function gatewayHost(config: AppConfig): string {
   const host = config.host === "0.0.0.0" ? "127.0.0.1" : config.host === "::" ? "::1" : config.host;
@@ -85,18 +97,13 @@ async function main(): Promise<void> {
     return;
   }
   const endpoint = controlEndpoint(path.resolve(root));
+  if (action !== "start" && action !== "stop" && action !== "verify") throw new Error("Usage: launcher.ts start [--tunnel] | stop | verify");
+  if (existsSync(".env")) process.loadEnvFile(".env");
   if (action === "stop") {
-    try {
-      await stopServices(endpoint);
-      console.log("EdgeInference managed services stopped.");
-    } catch (error) {
-      if (!["ENOENT", "ECONNREFUSED"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
-      console.log("No EdgeInference runner is active for this checkout.");
-    }
+    const stopped = await stopEverything(root, endpoint);
+    console.log(stopped.length > 0 ? `Stopped ${stopped.join(", ")}.` : "No EdgeInference services or port holders are running.");
     return;
   }
-  if (action !== "start" && action !== "verify") throw new Error("Usage: launcher.ts start [--tunnel] | stop | verify");
-  if (existsSync(".env")) process.loadEnvFile(".env");
   const config = loadConfig();
   const audit = await runEnvironmentAudit();
   if (!audit.passed) throw new Error("Gateway requirements failed: Node.js >= 24 and working better-sqlite3/sharp builds are required. Run pnpm verify:env.");
@@ -111,6 +118,8 @@ async function main(): Promise<void> {
     }
   };
   if (action === "verify") { await verifyModels(); return; }
+  const stopped = await stopEverything(root, endpoint);
+  if (stopped.length > 0) console.log(`Stopped before starting: ${stopped.join(", ")}.`);
   const tunnel = process.argv.includes("--tunnel") || process.argv.includes("-t") ||
     [process.env.CLOUDFLARE_TUNNEL_ENABLED, process.env.CF_TUNNEL_ENABLED].includes("true") ||
     Boolean(process.env.CLOUDFLARE_TUNNEL_TOKEN || process.env.CF_TUNNEL_TOKEN);
