@@ -101,7 +101,8 @@ export function createApp(deps: AppDependencies): FastifyInstance {
   // Mandatory Early Authentication Hook (onRequest lifecycle)
   app.addHook("onRequest", async (request, _reply) => {
     // Root and Health check endpoints are exempt from authentication
-    if (request.url === "/" || request.url === "/health" || request.url === "/live") {
+    const pathname = request.url.split("?")[0];
+    if (pathname === "/" || pathname === "/health" || pathname === "/live") {
       return;
     }
 

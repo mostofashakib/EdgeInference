@@ -13,6 +13,19 @@ export class QuotaService {
     public readonly guestRateLimitPerMinute: number = 3
   ) {}
 
+  private pruneStale(nowMs: number): void {
+    // Prevent unbounded memory accumulation across long uptimes
+    if (this.guestRequestTimestamps.size > 128) {
+      const windowStartMs = nowMs - 60_000;
+      for (const [key, times] of this.guestRequestTimestamps.entries()) {
+        const lastTime = times[times.length - 1];
+        if (lastTime === undefined || lastTime <= windowStartMs) {
+          this.guestRequestTimestamps.delete(key);
+        }
+      }
+    }
+  }
+
   async checkAndReserve(keyId: string, role: ClientRole = "owner"): Promise<QuotaReservation> {
     const now = this.clock.now();
     const nowMs = now.getTime();
@@ -26,6 +39,8 @@ export class QuotaService {
         resetAt: new Date(nowMs + 86400000)
       };
     }
+
+    this.pruneStale(nowMs);
 
     // 2. Everyone else (guests/external clients) is strictly rate-limited
     // Sliding window: filter timestamps in the last 60 seconds (60,000 ms)
@@ -67,6 +82,9 @@ export class QuotaService {
     const timestamps = this.guestRequestTimestamps.get(keyId);
     if (timestamps && timestamps.length > 0) {
       timestamps.pop();
+      if (timestamps.length === 0) {
+        this.guestRequestTimestamps.delete(keyId);
+      }
     }
   }
 }

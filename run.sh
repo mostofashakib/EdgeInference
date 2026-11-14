@@ -6,5 +6,6 @@ case "${BASH_SOURCE[0]}" in
   */*) cd "${BASH_SOURCE[0]%/*}" ;;
 esac
 source ./scripts/runtime/bootstrap.sh
+edge_setup_python_env
 edge_find_node
 exec "$EDGE_NODE_EXECUTABLE" --import tsx scripts/runtime/launcher.ts start "$@"

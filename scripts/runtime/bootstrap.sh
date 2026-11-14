@@ -30,3 +30,21 @@ edge_find_node() {
   printf '%s\n' 'EdgeInference requires Node.js 24 or newer. Install it or add its bin directory to PATH.' >&2
   return 1
 }
+
+edge_setup_python_env() {
+  command -v python3 >/dev/null 2>&1 || return 0
+  local venv_dir=".venv"
+  local req_file="requirements.txt"
+  if [[ ! -d "$venv_dir" || ! -f "$venv_dir/bin/activate" ]]; then
+    python3 -m venv "$venv_dir" >/dev/null 2>&1 || return 0
+  fi
+  if [[ -f "$venv_dir/bin/activate" ]]; then
+    # shellcheck source=/dev/null
+    source "$venv_dir/bin/activate"
+  fi
+  if [[ -f "$req_file" && -x "$venv_dir/bin/pip" ]]; then
+    if ! python3 -c "import openai, requests" >/dev/null 2>&1; then
+      "$venv_dir/bin/pip" install -q -r "$req_file" >/dev/null 2>&1 || true
+    fi
+  fi
+}

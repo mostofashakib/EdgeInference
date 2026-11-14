@@ -9,6 +9,17 @@ export interface ConfiguredKey {
   role?: ClientRole | undefined;
 }
 
+interface AuthenticatedKey {
+  readonly keyId: string;
+  readonly secret: string;
+  readonly role: ClientRole;
+  readonly sha256Digest: string;
+}
+
+function resolveKeyRole(key: ConfiguredKey): ClientRole {
+  return key.role ?? (key.keyId.startsWith("owner") || key.keyId.includes("primary") ? "owner" : "guest");
+}
+
 function getHeaderValue(
   headers: Record<string, string | string[] | undefined> | undefined,
   key: string
@@ -22,13 +33,20 @@ function getHeaderValue(
 }
 
 export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
-  private readonly keys: ReadonlyArray<ConfiguredKey>;
+  private readonly keys: ReadonlyArray<AuthenticatedKey>;
 
   constructor(keys: ConfiguredKey[]) {
     if (!keys || keys.length === 0) {
       throw new Error("BearerTokenAuthenticator requires at least one configured API key.");
     }
-    this.keys = Object.freeze([...keys]);
+    this.keys = Object.freeze(
+      keys.map((k) => ({
+        keyId: k.keyId,
+        secret: k.secret,
+        role: resolveKeyRole(k),
+        sha256Digest: crypto.createHash("sha256").update(k.secret).digest("hex")
+      }))
+    );
   }
 
   authenticate(authorizationHeader?: string, context?: RequestAuthContext): AuthenticationResult {
@@ -121,11 +139,10 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
         for (const candidate of canonicalCandidates) {
           const expectedSig = crypto.createHmac("sha256", key.secret).update(candidate).digest("hex");
           if (timingSafeEqualString(signatureToVerify, expectedSig)) {
-            const role = key.role ?? (key.keyId.startsWith("owner") || key.keyId.includes("primary") ? "owner" : "guest");
             return {
               authenticated: true,
               keyId: key.keyId,
-              role
+              role: key.role
             };
           }
         }
@@ -141,13 +158,11 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
     const xHashedToken = getHeaderValue(headers, "x-hashed-token");
     if (xHashedToken) {
       for (const key of this.keys) {
-        const expectedHash = crypto.createHash("sha256").update(key.secret).digest("hex");
-        if (timingSafeEqualString(xHashedToken, expectedHash)) {
-          const role = key.role ?? (key.keyId.startsWith("owner") || key.keyId.includes("primary") ? "owner" : "guest");
+        if (timingSafeEqualString(xHashedToken, key.sha256Digest)) {
           return {
             authenticated: true,
             keyId: key.keyId,
-            role
+            role: key.role
           };
         }
       }
@@ -181,15 +196,11 @@ export class BearerTokenAuthenticator implements ApiKeyAuthenticator {
 
     // Compare only SHA-256 digests. Raw API secrets are rejected above.
     for (const key of this.keys) {
-      const expectedHash = crypto.createHash("sha256").update(key.secret).digest("hex");
-      const isHashMatch = timingSafeEqualString(submittedToken, expectedHash);
-
-      if (isHashMatch) {
-        const role = key.role ?? (key.keyId.startsWith("owner") || key.keyId.includes("primary") ? "owner" : "guest");
+      if (timingSafeEqualString(submittedToken, key.sha256Digest)) {
         return {
           authenticated: true,
           keyId: key.keyId,
-          role
+          role: key.role
         };
       }
     }

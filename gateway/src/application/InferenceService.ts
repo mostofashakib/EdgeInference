@@ -125,31 +125,28 @@ export class InferenceService {
     return { processedMessages, imageCount };
   }
 
-  async generate(
+  private async admit(
     request: InferenceRequest,
     keyId: string,
-    requestId: string,
-    signal?: AbortSignal,
-    role: ClientRole = "owner"
-  ): Promise<InferenceResponse> {
-    const startTime = performance.now();
-
-    // 1. Model allowlist validation
+    role: ClientRole,
+    signal?: AbortSignal
+  ): Promise<{
+    sanitizedRequest: InferenceRequest;
+    lease: InferenceLease;
+    imageCount: number;
+  }> {
     if (!this.options.allowedModels.includes(request.model)) {
       throw new ModelNotAllowedError(request.model);
     }
 
-    // 2. Validate and normalize multimodal inputs and text limits
     const { processedMessages, imageCount } = await this.processAndValidateMessages(request.messages);
     const sanitizedRequest: InferenceRequest = {
       ...request,
       messages: processedMessages
     };
 
-    // 3. Atomic daily quota / rate limit check
     await this.quotaService.checkAndReserve(keyId, role);
 
-    // 4. Concurrency lease acquisition (rollback quota if rejected or aborted while queued)
     let lease: InferenceLease;
     try {
       lease = await this.admissionController.acquire(signal);
@@ -158,8 +155,43 @@ export class InferenceService {
       throw err;
     }
 
+    return { sanitizedRequest, lease, imageCount };
+  }
+
+  private recordFailure(params: {
+    requestId: string;
+    keyId: string;
+    model: string;
+    durationMs: number;
+    imageCount: number;
+    stream: boolean;
+    ttftMs?: number | undefined;
+    error: unknown;
+  }): void {
+    this.metricsRecorder.recordRequest({
+      requestId: params.requestId,
+      keyId: params.keyId,
+      model: params.model,
+      statusCode: 500,
+      durationMs: params.durationMs,
+      ttftMs: params.ttftMs,
+      imageCount: params.imageCount,
+      stream: params.stream,
+      error: params.error instanceof Error ? params.error.message : String(params.error)
+    });
+  }
+
+  async generate(
+    request: InferenceRequest,
+    keyId: string,
+    requestId: string,
+    signal?: AbortSignal,
+    role: ClientRole = "owner"
+  ): Promise<InferenceResponse> {
+    const startTime = performance.now();
+    const { sanitizedRequest, lease, imageCount } = await this.admit(request, keyId, role, signal);
+
     try {
-      // 5. Invoke inference client
       const response = await this.client.generate(sanitizedRequest, signal);
       const durationMs = performance.now() - startTime;
 
@@ -177,20 +209,17 @@ export class InferenceService {
 
       return response;
     } catch (err) {
-      const durationMs = performance.now() - startTime;
-      this.metricsRecorder.recordRequest({
+      this.recordFailure({
         requestId,
         keyId,
         model: request.model,
-        statusCode: 500,
-        durationMs,
+        durationMs: performance.now() - startTime,
         imageCount,
         stream: false,
-        error: (err as Error).message
+        error: err
       });
       throw err;
     } finally {
-      // Guaranteed resource reclamation
       await lease.release();
     }
   }
@@ -203,30 +232,7 @@ export class InferenceService {
     role: ClientRole = "owner"
   ): AsyncIterable<InferenceEvent> {
     const startTime = performance.now();
-
-    // 1. Model allowlist validation
-    if (!this.options.allowedModels.includes(request.model)) {
-      throw new ModelNotAllowedError(request.model);
-    }
-
-    // 2. Validate and normalize multimodal inputs and text limits
-    const { processedMessages, imageCount } = await this.processAndValidateMessages(request.messages);
-    const sanitizedRequest: InferenceRequest = {
-      ...request,
-      messages: processedMessages
-    };
-
-    // 3. Atomic daily quota / rate limit check
-    await this.quotaService.checkAndReserve(keyId, role);
-
-    // 4. Concurrency lease acquisition (rollback quota if rejected or aborted while queued)
-    let lease: InferenceLease;
-    try {
-      lease = await this.admissionController.acquire(signal);
-    } catch (err) {
-      await this.quotaService.rollback(keyId, role);
-      throw err;
-    }
+    const { sanitizedRequest, lease, imageCount } = await this.admit(request, keyId, role, signal);
     let ttftMs: number | undefined;
 
     try {
@@ -238,33 +244,29 @@ export class InferenceService {
         yield chunk;
       }
 
-      const durationMs = performance.now() - startTime;
       this.metricsRecorder.recordRequest({
         requestId,
         keyId,
         model: request.model,
         statusCode: 200,
-        durationMs,
+        durationMs: performance.now() - startTime,
         ttftMs,
         imageCount,
         stream: true
       });
     } catch (err) {
-      const durationMs = performance.now() - startTime;
-      this.metricsRecorder.recordRequest({
+      this.recordFailure({
         requestId,
         keyId,
         model: request.model,
-        statusCode: 500,
-        durationMs,
+        durationMs: performance.now() - startTime,
         ttftMs,
         imageCount,
         stream: true,
-        error: (err as Error).message
+        error: err
       });
       throw err;
     } finally {
-      // Guaranteed resource reclamation
       await lease.release();
     }
   }

@@ -19,10 +19,8 @@ export class OllamaInferenceClient implements InferenceClient {
     };
   }
 
-  async generate(request: InferenceRequest, signal?: AbortSignal): Promise<InferenceResponse> {
+  private async dispatchUpstream(payload: unknown, signal?: AbortSignal): Promise<Response> {
     const url = `${this.baseUrl}/v1/chat/completions`;
-    const payload = this.mapRequestPayload(request, false);
-
     let res: Response;
     try {
       res = await fetch(url, {
@@ -50,6 +48,13 @@ export class OllamaInferenceClient implements InferenceClient {
       );
     }
 
+    return res;
+  }
+
+  async generate(request: InferenceRequest, signal?: AbortSignal): Promise<InferenceResponse> {
+    const payload = this.mapRequestPayload(request, false);
+    const res = await this.dispatchUpstream(payload, signal);
+
     try {
       return (await res.json()) as InferenceResponse;
     } catch (err) {
@@ -60,33 +65,11 @@ export class OllamaInferenceClient implements InferenceClient {
   }
 
   async *stream(request: InferenceRequest, signal?: AbortSignal): AsyncIterable<InferenceEvent> {
-    const url = `${this.baseUrl}/v1/chat/completions`;
     const payload = this.mapRequestPayload(request, true);
+    const res = await this.dispatchUpstream(payload, signal);
 
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload),
-        signal: signal ?? null
-      });
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        throw err;
-      }
-      throw new UpstreamServiceError(
-        `Failed to reach upstream Ollama stream at ${this.baseUrl}: ${(err as Error).message}`
-      );
-    }
-
-    if (!res.ok || !res.body) {
-      const errorText = await res.text().catch(() => "Unknown upstream error");
-      throw new UpstreamServiceError(
-        `Upstream Ollama stream returned HTTP ${res.status}: ${errorText}`
-      );
+    if (!res.body) {
+      throw new UpstreamServiceError("Upstream Ollama returned empty response stream body");
     }
 
     const reader = res.body.getReader();
