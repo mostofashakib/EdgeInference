@@ -68,6 +68,14 @@ describe.skipIf(process.platform === "win32")("stopping everything EdgeInference
     expect(holder.signalCode).toBe("SIGKILL");
   }, 15000);
 
+  it("kills a suspended process in state T holding a service port", async () => {
+    const port = await freePort();
+    const holder = await listenOn(port);
+    process.kill(holder.pid!, "SIGSTOP");
+    await stopRunningServices(await cleanupOptions([port]));
+    expect(hasExited(holder)).toBe(true);
+  }, 15000);
+
   it("reports nothing when no service is running", async () => {
     await expect(stopRunningServices(await cleanupOptions([await freePort()]))).resolves.toEqual([]);
   }, 15000);
@@ -115,6 +123,11 @@ describe("recognizing leftover EdgeInference processes", () => {
   it("matches this checkout's gateway", () => {
     expect(isLeftoverProcess("/bin/node --import tsx /project/gateway/src/main.ts", context)).toBe(true);
     expect(isLeftoverProcess("/bin/node --import tsx /other/gateway/src/main.ts", context)).toBe(false);
+  });
+
+  it("matches this checkout's launcher", () => {
+    expect(isLeftoverProcess("/bin/node --import tsx /project/scripts/runtime/launcher.ts", context)).toBe(true);
+    expect(isLeftoverProcess("/bin/node --import tsx /other/scripts/runtime/launcher.ts", context)).toBe(false);
   });
 
   it("matches quick tunnels to the proxy port and only that port", () => {

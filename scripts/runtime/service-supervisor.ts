@@ -20,11 +20,11 @@ export function controlEndpoint(root: string, platform: NodeJS.Platform = proces
   return platform === "win32" ? `\\\\.\\pipe\\edgeinference-${id}` : path.join(os.tmpdir(), `edgeinference-${id}.sock`);
 }
 
-export function stopServices(endpoint: string): Promise<void> {
+export function stopServices(endpoint: string, timeoutMs = 3000): Promise<void> {
   return new Promise((resolve, reject) => {
     const socket = net.connect(endpoint);
     let acknowledgement = "";
-    socket.setTimeout(15000, () => socket.destroy(new Error("Supervisor stop timed out")));
+    socket.setTimeout(timeoutMs, () => socket.destroy(new Error("Supervisor stop timed out")));
     socket.once("connect", () => socket.write("stop\n"));
     socket.on("data", (data) => { acknowledgement += data.toString(); });
     socket.once("error", reject);
