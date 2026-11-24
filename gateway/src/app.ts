@@ -66,7 +66,7 @@ export function createApp(deps: AppDependencies): FastifyInstance {
     deps.admissionController,
     deps.imageProcessor,
     deps.metricsRecorder,
-    { allowedModels: deps.config.allowedModels }
+    { allowedModels: deps.config.allowedModels, maxPromptChars: deps.config.maxPromptChars }
   );
 
   const controller = new ChatCompletionController(inferenceService);
