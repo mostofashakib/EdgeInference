@@ -30,7 +30,7 @@ export const ChatCompletionRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1).max(50),
   stream: z.boolean().optional().default(false),
   temperature: z.number().min(0).max(2).optional(),
-  max_tokens: z.number().int().positive().max(4096).optional()
+  max_tokens: z.number().int().positive().max(8192).optional()
 }).strict();
 
 export type ChatCompletionRequestBody = z.infer<typeof ChatCompletionRequestSchema>;

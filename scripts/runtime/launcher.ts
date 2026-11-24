@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,6 +58,7 @@ export function createServiceCommands(
   env: NodeJS.ProcessEnv,
   executables: { nginx: string; cloudflared?: string }
 ): ServiceCommand[] {
+  const prefix = `${root.replaceAll("\\", "/").replace(/\/+$/, "")}/`;
   const commands: ServiceCommand[] = [
     {
       name: "gateway", command: process.execPath,
@@ -66,10 +67,35 @@ export function createServiceCommands(
     },
     {
       name: "nginx", command: executables.nginx,
-      args: ["-p", `${root.replaceAll("\\", "/")}/`, "-e", "infra/nginx/error.log", "-c", "data/runtime-nginx.conf", "-g", "daemon off;"],
+      args: ["-p", prefix, "-e", "infra/nginx/error.log", "-c", "data/runtime-nginx.conf", "-g", "daemon off;"],
       ready: (signal) => waitForHealth("http://127.0.0.1:8080/health", signal),
       shutdown: async () => {
-        await promisify(execFile)(executables.nginx, ["-p", `${root.replaceAll("\\", "/")}/`, "-e", "infra/nginx/error.log", "-c", "data/runtime-nginx.conf", "-s", "stop"], { timeout: 5000 });
+        const pidPath = path.join(root, "infra/nginx/nginx.pid");
+        if (!existsSync(pidPath)) return;
+        try {
+          const content = await readFile(pidPath, "utf8").catch(() => "");
+          if (!content.trim()) {
+            await rm(pidPath, { force: true }).catch(() => {});
+            return;
+          }
+          await promisify(execFile)(
+            executables.nginx,
+            ["-p", prefix, "-e", "infra/nginx/error.log", "-c", "data/runtime-nginx.conf", "-s", "stop"],
+            { timeout: 5000 }
+          );
+        } catch (error) {
+          const message = (error as { stderr?: string }).stderr || (error as Error).message || "";
+          if (
+            message.includes("nginx.pid") ||
+            message.includes("No such file or directory") ||
+            message.includes("not running")
+          ) {
+            return;
+          }
+          throw error;
+        } finally {
+          await rm(pidPath, { force: true }).catch(() => {});
+        }
       }
     }
   ];
